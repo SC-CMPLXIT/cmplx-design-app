@@ -1,0 +1,115 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Instrument Serif", ui-serif, Georgia, serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --color-ink: #0c0c0b;
+  --color-ink-soft: #3c3832;
+  --color-paper: #efeae1;
+  --color-paper-2: #e4ddd0;
+  --color-rule: #cfc6b6;
+  --color-copper: #9a4a2a;
+  --color-copper-deep: #6e3018;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: #d8c4a8;
+}
+
+input,
+textarea,
+select,
+button {
+  font: inherit;
+}
+
+button,
+a,
+[role="button"] {
+  cursor: pointer;
+}
+
+textarea {
+  resize: vertical;
+}
+
+.print-only {
+  display: none;
+}
+
+@media print {
+  @page {
+    margin: 14mm 14mm 16mm;
+  }
+
+  html,
+  body,
+  #root {
+    background: white !important;
+    color: black !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .print-sheet {
+    box-shadow: none !important;
+    border: 0 !important;
+    padding: 0 !important;
+    max-width: none !important;
+  }
+
+  tr {
+    break-inside: avoid;
+  }
+
+  h1,
+  h2,
+  h3 {
+    break-after: avoid;
+  }
+
+  input,
+  textarea,
+  select {
+    appearance: none;
+    border-color: transparent !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    print-color-adjust: exact;
+  }
+
+  input[type="checkbox"] {
+    appearance: auto;
+    accent-color: #0c0c0b;
+  }
+
+  ::placeholder {
+    color: transparent !important;
+  }
+}
