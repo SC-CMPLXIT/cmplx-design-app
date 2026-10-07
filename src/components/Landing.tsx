@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { Banner, Button, ErrorText, Field, fieldControlClass } from "./ui";
 
@@ -19,6 +19,10 @@ export function Landing() {
   const [password, setPassword] = useState("");
   const [method, setMethod] = useState<Method>(linkError ? "link" : "password");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (linkError) setMethod("link");
+  }, [linkError]);
   const [localError, setLocalError] = useState<string | null>(null);
 
   async function run(action: () => Promise<void>) {

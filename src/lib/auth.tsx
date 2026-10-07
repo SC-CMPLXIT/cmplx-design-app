@@ -12,7 +12,9 @@ import {
   captureAuthCallback,
   friendlyAuthError,
   messageForAuthCallback,
+  parseAuthCallback,
   readAuthError,
+  stripAuthErrorParams,
   type AuthCallbackSnapshot,
 } from "./auth-callback";
 import { demoAuth } from "./demo-store";
@@ -180,6 +182,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       subscription.unsubscribe();
     };
   }, [settle]);
+
+  useEffect(() => {
+    function applyCallbackFromLocation() {
+      const snapshot = parseAuthCallback(window.location.href);
+      const message = messageForAuthCallback(snapshot);
+      if (message) {
+        setLinkError(message);
+        stripAuthErrorParams();
+      }
+      if (!isSupabaseConfigured) return;
+      if (snapshot.type === "recovery") {
+        sessionStorage.setItem(RECOVERY_KEY, "1");
+        setPasswordRecovery(true);
+      } else if (snapshot.type) {
+        clearRecoveryFlag();
+        setPasswordRecovery(false);
+      }
+    }
+
+    // Email clients redirect onto the current tab with only a hash change.
+    // The module-level capture already ran for the first URL, so listen here too.
+    window.addEventListener("hashchange", applyCallbackFromLocation);
+    return () => window.removeEventListener("hashchange", applyCallbackFromLocation);
+  }, []);
 
   const value = useMemo<AuthContextValue>(
     () => ({
