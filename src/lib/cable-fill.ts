@@ -340,6 +340,109 @@ export function assessCableFill(
   };
 }
 
+export const CABLE_FILL_GUIDANCE =
+  "NEC Ch. 9 Table 1 fill: 1 = 53%, 2 = 31%, 3 or more = 40%. Table 2 is the conduit bend radius. Cable bend is outside diameter times the multiplier (TIA or the manufacturer). The derate is best practice — 5% past 90° or 50 ft, 10% past 180° or 100 ft — and still has to clear the 360° pull-point rule. Confirm OD and bend with the cable spec sheet.";
+
+function formatCount(value: number): string {
+  if (Number.isInteger(value)) return String(value);
+  return String(Math.round(value * 1000) / 1000);
+}
+
+function shownNumber(value: string): string {
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? "0" : trimmed;
+}
+
+/** Plain-text snapshot of the current run. Session only — nothing is stored. */
+export function formatCableFillSummary(input: {
+  kind: ConduitKind;
+  cables: CableDraft[];
+  bends90: string;
+  bends45: string;
+  bends225: string;
+  runLength: string;
+  bendRadiusOverride: string;
+  useRecommended: boolean;
+  assessment: FillAssessment;
+  printedOn: string;
+}): string {
+  const { assessment } = input;
+  const bendById = new Map(assessment.bends.map((row) => [row.id, row]));
+  const cableWord = assessment.totalCount === 1 ? "cable" : "cables";
+  const lines = [
+    "CMPLX iT Design — Cable fill",
+    `${input.kind} ${assessment.size} · ${assessment.fillPct.toFixed(1)}% fill · ${assessment.status.tone.toUpperCase()}`,
+    `Printed ${input.printedOn}`,
+    "",
+    `Status: ${assessment.status.tone.toUpperCase()}`,
+    assessment.status.label,
+    "",
+    "Conduit",
+    `Type: ${input.kind}`,
+    `Trade size: ${assessment.size}`,
+    `Internal diameter: ${assessment.spec.id.toFixed(3)} in`,
+    `Internal area: ${assessment.spec.area.toFixed(3)} in²`,
+    `Table 2 min bend radius: ${assessment.spec.bendRadius.toFixed(2)} in`,
+    `Bend radius used: ${assessment.availableBendRadius.toFixed(2)} in (${assessment.usingOverride ? "override" : "Table 2"})`,
+    `Derate: ${input.useRecommended ? "on" : "off"}`,
+    "",
+    "Run",
+    `90° bends: ${shownNumber(input.bends90)}`,
+    `45° bends: ${shownNumber(input.bends45)}`,
+    `22.5° bends: ${shownNumber(input.bends225)}`,
+    `Run length: ${shownNumber(input.runLength)} ft`,
+    `Bend total: ${formatCount(assessment.totalBendDeg)}° / 360° — ${assessment.bendOk ? "within limit" : "exceeds 360°"}`,
+    "",
+    `Cables (${formatCount(assessment.totalCount)})`,
+  ];
+
+  if (input.cables.length === 0) {
+    lines.push("No cables.");
+  } else {
+    for (const cable of input.cables) {
+      const bend = bendById.get(cable.id);
+      const name = cable.name.trim() || "Cable";
+      const minR = bend ? `${bend.minR.toFixed(2)} in` : "—";
+      const bendState =
+        !bend || bend.minR <= 0 ? "not checked" : bend.ok ? "ok" : "over available radius";
+      lines.push(
+        `${name} — OD ${shownNumber(cable.od)} in — qty ${shownNumber(cable.qty)} — bend ${shownNumber(cable.bendMult)}× OD — min bend ${minR} — ${bendState}`,
+      );
+    }
+  }
+
+  const derateNote =
+    assessment.recLimit < assessment.necLimit
+      ? ` (−${assessment.necLimit - assessment.recLimit}% derate)`
+      : " (no derate)";
+
+  lines.push(
+    "",
+    "Fill",
+    `Actual: ${assessment.fillPct.toFixed(1)}%`,
+    `NEC code limit: ${assessment.necLimit}% (${formatCount(assessment.totalCount)} ${cableWord})`,
+    `Recommended: ${assessment.recLimit}%${derateNote}`,
+    `Active limit: ${assessment.activeLimit}% (${input.useRecommended ? "recommended" : "NEC"})`,
+    `Used area: ${assessment.usedArea.toFixed(3)} in²`,
+    `Available: ${assessment.remainingArea.toFixed(3)} in²`,
+    "",
+    "Jam ratio",
+  );
+
+  if (assessment.jamChecks.length === 0) {
+    lines.push("None. Checked when a row is exactly three cables of one outside diameter.");
+  } else {
+    for (const check of assessment.jamChecks) {
+      lines.push(
+        `${check.name} — ${check.ratio.toFixed(2)} — ${check.tone.toUpperCase()} — ${check.label}`,
+      );
+    }
+  }
+
+  lines.push("", "Guidance", CABLE_FILL_GUIDANCE);
+  return lines.join("\n");
+}
+
 export function packConduit(
   cables: CableDraft[],
   internalDiameter: number,

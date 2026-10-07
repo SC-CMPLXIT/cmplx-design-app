@@ -46,7 +46,7 @@ After Auth sign-in, resolve the allowlist row (`editors.email` ilike jwt email).
 
 ## In / out of MVP
 
-**In:** editor CRUD, project list/detail, status notes, brief editor, print CSS, demo seed, spaces, per-space system narrative, project bill of materials, cable fill calculator (`/tools/cable-fill`, session-local, NEC Chapter 9 — no new tables), UPS calculator (`/tools/ups`, session-local IT-load sizing — no new tables).
+**In:** editor CRUD, project list/detail, status notes, brief editor, print CSS, demo seed, spaces, per-space system narrative, project bill of materials, cable fill calculator (`/tools/cable-fill`, session-local, NEC Chapter 9 — no new tables), UPS calculator (`/tools/ups`, session-local IT-load sizing — no new tables). Index at `/tools`. Both calculators print (`window.print()`) and copy a plain-text summary of the current run. Session-local — no new tables, no project writes.
 
 **Out:** partners, exec links, finance, RAID, uploads, SharePoint, Tract, Soho House AM features, S1–S8 storyboard, PDF export, Granola design-review import.
 

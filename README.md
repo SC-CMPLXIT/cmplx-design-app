@@ -42,8 +42,9 @@ This is a clean CMPLX-native product (Vite + React + Tailwind + Supabase). It is
 
 ## Tools
 
-- **Cable fill** (`/tools/cable-fill`): NEC Chapter 9 conduit fill for editors, including demo mode. Pick conduit type and trade size, add preset or custom cables (outside diameter and count), and read fill percent against Table 1. The screen also draws a cross section and checks Table 2 bend radius, jam ratio, and a best-practice bend/run derate. State stays in the browser session. It does not create projects, briefs, or bill-of-materials lines, and it needs no env vars.
-- **UPS** (`/tools/ups`): IT-load UPS sizing for editors, including demo mode. Add preset or custom devices (label, watts, quantity), set power factor, safety margin, and UPS efficiency, then either enter battery watt-hours to read runtime or enter a target runtime to read required watt-hours. The screen recommends a common VA tier and marks load percent pass, warn, or fail against an 80% ceiling. State stays in the browser session. It does not create projects, briefs, or bill-of-materials lines, and it needs no env vars.
+- **Tools index** (`/tools`): short list of the calculators. The header links here. Editors and demo mode. Signed-out visitors still see the landing page.
+- **Cable fill** (`/tools/cable-fill`): NEC Chapter 9 conduit fill for editors, including demo mode. Pick conduit type and trade size, add preset or custom cables (outside diameter and count), and read fill percent against Table 1. The screen also draws a cross section and checks Table 2 bend radius, jam ratio, and a best-practice bend/run derate. **Print** uses the same browser print path as the brief. **Copy summary** puts a plain-text snapshot of the current conduit, cables, fill percent, and pass/warn/fail on the clipboard. State stays in the browser session. It does not create projects, briefs, or bill-of-materials lines, and it needs no env vars.
+- **UPS** (`/tools/ups`): IT-load UPS sizing for editors, including demo mode. Add preset or custom devices (label, watts, quantity), set power factor, safety margin, and UPS efficiency, then either enter battery watt-hours to read runtime or enter a target runtime to read required watt-hours. The screen recommends a common VA tier and marks load percent pass, warn, or fail against an 80% ceiling. **Print** and **Copy summary** work the same way as cable fill (devices, VA, runtime, pass/warn/fail). State stays in the browser session. It does not create projects, briefs, or bill-of-materials lines, and it needs no env vars.
 
 ## What is out of MVP
 
@@ -150,8 +151,9 @@ Someone who can sign in but is missing from `editors` sees the not-editor screen
 - `/projects/new` — create
 - `/projects/:id` — status, notes, space list (add, rename, reorder, remove), bill of materials (`#bill-of-materials`), link/create brief
 - `/projects/:id/brief` — editor + print, including the system narrative (`#system-narrative`) and the bill of materials (`#bill-of-materials`)
-- `/tools/cable-fill` — NEC conduit fill calculator. Linked from the header. Editors and demo mode. No project id. Session state only. Signed-out visitors still see the landing page.
-- `/tools/ups` — IT-load UPS calculator. Linked from the header. Editors and demo mode. No project id. Session state only. Signed-out visitors still see the landing page.
+- `/tools` — calculator index (cable fill, UPS). Linked from the header. Editors and demo mode. Signed-out visitors still see the landing page.
+- `/tools/cable-fill` — NEC conduit fill calculator. Editors and demo mode. No project id. Session state only. Print and copy summary stay in the browser.
+- `/tools/ups` — IT-load UPS calculator. Editors and demo mode. No project id. Session state only. Print and copy summary stay in the browser.
 
 ## Verify spaces (v1.1)
 
@@ -188,24 +190,28 @@ Live Supabase: run `db/005_bom.sql` after 001–004, sign in as an allowlisted e
 
 Demo mode, with no Supabase env:
 
-1. `npm run dev` and choose **Enter demo workspace**. Open **Cable fill** in the header.
+1. `npm run dev` and choose **Enter demo workspace**. Open **Tools** in the header, then **Cable fill**.
 2. The sample EMT 1" run (eight Cat6A UTP plus one 12-strand fiber, two 90° bends, 75 ft) reads over the recommended limit. The cross section, fill bar, and status all show that.
 3. Change the trade size to 2". Fill drops inside the limit.
 4. Add a preset, then a custom cable (name, OD, quantity). **Clear all** returns the empty state.
 5. Set one cable quantity to 3 and confirm a jam-ratio line. Set 90° bends to 5 and confirm the 360° failure.
-6. At about 390px wide, the header, cable rows, and fill panel stay inside the viewport.
+6. **Copy summary**. The button confirms, and the clipboard text names the conduit, each cable, the fill percent, and pass/warn/fail. It does not open a share link.
+7. **Print** (or print preview). The page shows conduit, run, cables, fill, jam ratio, and the guidance note, without the header, demo banner, quick-add chips, or remove controls. It fits letter or A4 without a horizontal scrollbar.
+8. At about 390px wide, the header, cable rows, and fill panel stay inside the viewport.
 
-Signed out, `/tools/cable-fill` stays on the landing page. An allowlisted editor in live mode uses the same route after sign-in.
+Signed out, `/tools` and `/tools/cable-fill` stay on the landing page. An allowlisted editor in live mode uses the same routes after sign-in.
 
 ## Verify UPS
 
 Demo mode, with no Supabase env:
 
-1. `npm run dev` and choose **Enter demo workspace**. Open **UPS** in the header.
+1. `npm run dev` and choose **Enter demo workspace**. Open **Tools** in the header, then **UPS**.
 2. The seed load (two 1U servers, one 24-port switch, one firewall) at power factor 0.9, 25% margin, 94% efficiency, and 2,400 Wh recommends a 750 VA tier, about 76% of that tier (warn, still under 80%), and a runtime in minutes. The derived runtime field is read-only.
 3. Change a quantity or the watts. Totals, tier, load percent, and runtime follow.
 4. Switch to **Runtime → battery**, enter a target in minutes, and confirm required watt-hours is read-only. Switch back and confirm battery watt-hours is editable again.
 5. Raise the load, or use the 20% margin, until load percent of the tier is above 80%. Status reads fail.
-6. At about 390px wide, the header, device rows, and sizing panel stay inside the viewport.
+6. **Copy summary**. The clipboard text lists devices, VA, runtime, and pass/warn/fail.
+7. **Print** (or print preview). The page shows devices, configuration, sizing, and the guidance note, without the header, demo banner, or add/remove controls.
+8. At about 390px wide, the header, device rows, and sizing panel stay inside the viewport.
 
-Signed out, `/tools/ups` stays on the landing page. An allowlisted editor in live mode uses the same route after sign-in.
+Signed out, `/tools` and `/tools/ups` stay on the landing page. An allowlisted editor in live mode uses the same routes after sign-in.
