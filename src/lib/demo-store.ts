@@ -3,9 +3,14 @@ import type {
   AuthUser,
   BriefDraft,
   DesignBrief,
+  NarrativeDraft,
   Project,
   ProjectDraft,
+  ProjectSpace,
   ScopeItem,
+  SpaceBundle,
+  SpaceDraft,
+  SpaceSystemNarrative,
   StatusUpdate,
 } from "./types";
 
@@ -16,6 +21,8 @@ type DemoState = {
   projects: Project[];
   statusUpdates: StatusUpdate[];
   briefs: DesignBrief[];
+  spaces: ProjectSpace[];
+  narratives: SpaceSystemNarrative[];
 };
 
 const DEMO_USER: AuthUser = {
@@ -43,6 +50,181 @@ function seedScope(
       note: overlay?.note ?? "",
     };
   });
+}
+
+function seedSpaces(): ProjectSpace[] {
+  const stamp = "2026-06-02T16:30:00.000Z";
+  const innStamp = "2026-07-18T11:15:00.000Z";
+  return [
+    space(
+      "a1111111-1111-4111-8111-111111111101",
+      "11111111-1111-4111-8111-111111111111",
+      "Lobby",
+      1,
+      "Members arrival",
+      stamp,
+    ),
+    space(
+      "a1111111-1111-4111-8111-111111111102",
+      "11111111-1111-4111-8111-111111111111",
+      "Dock-side room",
+      2,
+      "Events and meetings",
+      stamp,
+    ),
+    space(
+      "a1111111-1111-4111-8111-111111111103",
+      "11111111-1111-4111-8111-111111111111",
+      "Back of house",
+      3,
+      "Service corridor IDF",
+      stamp,
+    ),
+    space(
+      "a2222222-2222-4222-8222-222222222201",
+      "22222222-2222-4222-8222-222222222222",
+      "Guest rooms",
+      1,
+      "84 keys",
+      innStamp,
+    ),
+    space(
+      "a2222222-2222-4222-8222-222222222202",
+      "22222222-2222-4222-8222-222222222222",
+      "Circulation",
+      2,
+      "Corridors and stairs",
+      innStamp,
+    ),
+  ];
+}
+
+function space(
+  id: string,
+  projectId: string,
+  name: string,
+  sortOrder: number,
+  note: string,
+  stamp: string,
+): ProjectSpace {
+  return {
+    id,
+    project_id: projectId,
+    name,
+    sort_order: sortOrder,
+    note,
+    created_at: stamp,
+    updated_at: stamp,
+    deleted_at: null,
+  };
+}
+
+function narrative(
+  id: string,
+  spaceId: string,
+  categoryKey: string | null,
+  body: string,
+  stamp: string,
+): SpaceSystemNarrative {
+  return {
+    id,
+    space_id: spaceId,
+    category_key: categoryKey,
+    body,
+    created_at: stamp,
+    updated_at: stamp,
+  };
+}
+
+function seedNarratives(): SpaceSystemNarrative[] {
+  const stamp = "2026-06-02T16:30:00.000Z";
+  const innStamp = "2026-07-18T11:15:00.000Z";
+  return [
+    narrative(
+      "d1111111-1111-4111-8111-111111111101",
+      "a1111111-1111-4111-8111-111111111101",
+      null,
+      "Arrival stays quiet. Technology sits in the joinery: a discreet reader, staff radio coverage, and wireless that holds when the door queue builds.",
+      stamp,
+    ),
+    narrative(
+      "d1111111-1111-4111-8111-111111111102",
+      "a1111111-1111-4111-8111-111111111101",
+      "wireless",
+      "Ceiling APs clear of the timber truss. Guest SSID in the public volume; staff SSID reaches the host desk.",
+      stamp,
+    ),
+    narrative(
+      "d1111111-1111-4111-8111-111111111103",
+      "a1111111-1111-4111-8111-111111111101",
+      "access_control",
+      "One reader on the members door, strike in the existing leaf. No turnstile and no lobby pedestal.",
+      stamp,
+    ),
+    narrative(
+      "d1111111-1111-4111-8111-111111111104",
+      "a1111111-1111-4111-8111-111111111102",
+      null,
+      "One room, one purpose: speech and a single image. Nothing else competes with the view to the dock.",
+      stamp,
+    ),
+    narrative(
+      "d1111111-1111-4111-8111-111111111105",
+      "a1111111-1111-4111-8111-111111111102",
+      "av_events",
+      "Projection on the long wall and speech reinforcement. No stage-lighting package in this phase.",
+      stamp,
+    ),
+    narrative(
+      "d1111111-1111-4111-8111-111111111106",
+      "a1111111-1111-4111-8111-111111111103",
+      null,
+      "The only place racks are allowed. Service corridor IDF, off the guest path.",
+      stamp,
+    ),
+    narrative(
+      "d1111111-1111-4111-8111-111111111107",
+      "a1111111-1111-4111-8111-111111111103",
+      "structured_cabling",
+      "New IDF with short runs to the dock-side room and the lobby. No public-facing cabinets.",
+      stamp,
+    ),
+    narrative(
+      "d2222222-2222-4222-8222-222222222201",
+      "a2222222-2222-4222-8222-222222222201",
+      null,
+      "Eighty-four keys. The room should feel unchanged; the lock, the set, and the network are the work.",
+      innStamp,
+    ),
+    narrative(
+      "d2222222-2222-4222-8222-222222222202",
+      "a2222222-2222-4222-8222-222222222201",
+      "iptv",
+      "Replace the in-room set. Keep the current headend if it can feed the new panels.",
+      innStamp,
+    ),
+    narrative(
+      "d2222222-2222-4222-8222-222222222203",
+      "a2222222-2222-4222-8222-222222222201",
+      "access_control",
+      "Lock must mate with the listed door leaf. No new frame, no surface maglock.",
+      innStamp,
+    ),
+    narrative(
+      "d2222222-2222-4222-8222-222222222204",
+      "a2222222-2222-4222-8222-222222222202",
+      null,
+      "Circulation carries guest wireless and a staff path back to the service core. No new racks here.",
+      innStamp,
+    ),
+    narrative(
+      "d2222222-2222-4222-8222-222222222205",
+      "a2222222-2222-4222-8222-222222222202",
+      "wireless",
+      "Guest coverage along corridors and stairs. Staff SSID stays off the guest ceiling where the fabric allows.",
+      innStamp,
+    ),
+  ];
 }
 
 function seedState(): DemoState {
@@ -181,6 +363,8 @@ function seedState(): DemoState {
         }),
       },
     ],
+    spaces: seedSpaces(),
+    narratives: seedNarratives(),
   };
 }
 
@@ -188,7 +372,28 @@ function load(): DemoState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return seedState();
-    return JSON.parse(raw) as DemoState;
+    const parsed = JSON.parse(raw) as DemoState;
+    if (!parsed || !Array.isArray(parsed.projects) || !Array.isArray(parsed.briefs)) {
+      return seedState();
+    }
+    if (!Array.isArray(parsed.statusUpdates)) parsed.statusUpdates = [];
+    let upgraded = false;
+    if (!Array.isArray(parsed.spaces)) {
+      const seed = seedState();
+      parsed.spaces = seed.spaces.filter((row) =>
+        parsed.projects.some((project) => project.id === row.project_id),
+      );
+      parsed.narratives = seed.narratives.filter((row) =>
+        parsed.spaces.some((item) => item.id === row.space_id),
+      );
+      upgraded = true;
+    }
+    if (!Array.isArray(parsed.narratives)) {
+      parsed.narratives = [];
+      upgraded = true;
+    }
+    if (upgraded) persist(parsed);
+    return parsed;
   } catch {
     return seedState();
   }
@@ -275,6 +480,12 @@ export const demoApi = {
       project.updated_at = project.deleted_at;
       const brief = state.briefs.find((row) => row.project_id === id);
       if (brief) brief.deleted_at = project.deleted_at;
+      for (const item of state.spaces) {
+        if (item.project_id === id && !item.deleted_at) {
+          item.deleted_at = project.deleted_at;
+          item.updated_at = project.deleted_at;
+        }
+      }
     });
   },
 
@@ -362,6 +573,128 @@ export const demoApi = {
         }
       }
       return structuredClone(brief);
+    });
+  },
+
+  getSpaceBundle(projectId: string): SpaceBundle {
+    const state = load();
+    const spaces = state.spaces
+      .filter((row) => row.project_id === projectId && !row.deleted_at)
+      .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name))
+      .map((row) => ({ ...row }));
+    const ids = new Set(spaces.map((row) => row.id));
+    const narratives = state.narratives
+      .filter((row) => ids.has(row.space_id))
+      .map((row) => ({ ...row }));
+    return { spaces, narratives };
+  },
+
+  createSpace(projectId: string, name: string, note = ""): ProjectSpace {
+    const trimmed = name.trim();
+    if (!trimmed) throw new Error("Space name is required.");
+    const now = isoNow();
+    return mutate((state) => {
+      const project = state.projects.find((row) => row.id === projectId && !row.deleted_at);
+      if (!project) throw new Error("Project not found.");
+      const sortOrder =
+        state.spaces
+          .filter((row) => row.project_id === projectId && !row.deleted_at)
+          .reduce((max, row) => Math.max(max, row.sort_order), 0) + 1;
+      const created: ProjectSpace = {
+        id: crypto.randomUUID(),
+        project_id: projectId,
+        name: trimmed,
+        sort_order: sortOrder,
+        note: note.trim(),
+        created_at: now,
+        updated_at: now,
+        deleted_at: null,
+      };
+      state.spaces.push(created);
+      project.updated_at = now;
+      return { ...created };
+    });
+  },
+
+  updateSpace(id: string, draft: SpaceDraft): ProjectSpace {
+    const name = draft.name.trim();
+    if (!name) throw new Error("Space name is required.");
+    return mutate((state) => {
+      const row = state.spaces.find((item) => item.id === id && !item.deleted_at);
+      if (!row) throw new Error("Space not found.");
+      row.name = name;
+      row.note = draft.note.trim();
+      row.updated_at = isoNow();
+      const project = state.projects.find(
+        (item) => item.id === row.project_id && !item.deleted_at,
+      );
+      if (project) project.updated_at = row.updated_at;
+      return { ...row };
+    });
+  },
+
+  reorderSpaces(projectId: string, orderedIds: string[]) {
+    mutate((state) => {
+      const now = isoNow();
+      orderedIds.forEach((id, index) => {
+        const row = state.spaces.find(
+          (item) => item.id === id && item.project_id === projectId && !item.deleted_at,
+        );
+        if (!row) throw new Error("Space not found.");
+        row.sort_order = index + 1;
+        row.updated_at = now;
+      });
+      const project = state.projects.find((item) => item.id === projectId && !item.deleted_at);
+      if (project) project.updated_at = now;
+    });
+  },
+
+  archiveSpace(id: string) {
+    mutate((state) => {
+      const row = state.spaces.find((item) => item.id === id && !item.deleted_at);
+      if (!row) throw new Error("Space not found.");
+      row.deleted_at = isoNow();
+      row.updated_at = row.deleted_at;
+      const project = state.projects.find(
+        (item) => item.id === row.project_id && !item.deleted_at,
+      );
+      if (project) project.updated_at = row.deleted_at;
+    });
+  },
+
+  saveNarratives(spaceId: string, drafts: NarrativeDraft[]): SpaceSystemNarrative[] {
+    return mutate((state) => {
+      const space = state.spaces.find((item) => item.id === spaceId && !item.deleted_at);
+      if (!space) throw new Error("Space not found.");
+      const now = isoNow();
+      const saved: SpaceSystemNarrative[] = [];
+      for (const draft of drafts) {
+        const match = state.narratives.find(
+          (row) => row.space_id === spaceId && row.category_key === draft.category_key,
+        );
+        if (match) {
+          match.body = draft.body;
+          match.updated_at = now;
+          saved.push({ ...match });
+        } else {
+          const created: SpaceSystemNarrative = {
+            id: crypto.randomUUID(),
+            space_id: spaceId,
+            category_key: draft.category_key,
+            body: draft.body,
+            created_at: now,
+            updated_at: now,
+          };
+          state.narratives.push(created);
+          saved.push({ ...created });
+        }
+      }
+      space.updated_at = now;
+      const project = state.projects.find(
+        (item) => item.id === space.project_id && !item.deleted_at,
+      );
+      if (project) project.updated_at = now;
+      return saved;
     });
   },
 };

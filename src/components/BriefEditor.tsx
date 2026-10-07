@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "@/lib/api";
 import { emptyToNull, formatDate } from "@/lib/dates";
@@ -11,6 +11,7 @@ import {
   type ScopeItem,
 } from "@/lib/types";
 import { StatusPill } from "./StatusPill";
+import { SystemNarrative } from "./SystemNarrative";
 import { Button, ErrorText, Field, fieldControlClass } from "./ui";
 
 type DraftItem = ScopeItem;
@@ -62,6 +63,17 @@ export function BriefEditor() {
       cancelled = true;
     };
   }, [projectId]);
+
+  const hashScrolled = useRef<string | null>(null);
+  useEffect(() => {
+    if (loading || !brief) return;
+    const id = window.location.hash.replace(/^#/, "");
+    if (!id) return;
+    const token = `${projectId ?? ""}:${id}`;
+    if (hashScrolled.current === token) return;
+    hashScrolled.current = token;
+    document.getElementById(id)?.scrollIntoView({ block: "start" });
+  }, [loading, projectId, brief]);
 
   function applyBrief(next: DesignBrief) {
     setBrief(next);
@@ -126,7 +138,8 @@ export function BriefEditor() {
   }
 
   return (
-    <form className="print-sheet space-y-8" onSubmit={onSave}>
+    <div className="print-sheet space-y-8">
+    <form className="space-y-8" onSubmit={onSave}>
       <div className="print-only mb-6 border-b border-black pb-4">
         <p className="font-mono text-[11px] uppercase tracking-[0.18em]">
           CMPLX iT Design · Design brief
@@ -150,9 +163,9 @@ export function BriefEditor() {
             Brief editor_
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-soft">
-            Header, standard-15 systems, then intent / constraints / open
-            decisions. Print this view when you need to share — no PDF pipeline
-            in v1.
+            Header, standard-15 systems, project narrative, then a system
+            narrative for each space. Print this view when you need to share —
+            no PDF pipeline in v1.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -271,7 +284,11 @@ export function BriefEditor() {
       </section>
 
       <section className="space-y-4 rounded-sm border border-rule bg-white p-5">
-        <h2 className="font-serif text-3xl">Narrative</h2>
+        <h2 className="font-serif text-3xl">Project narrative</h2>
+        <p className="text-sm leading-6 text-ink-soft">
+          These three stay on the project. Space-by-space system notes are the
+          next section.
+        </p>
         <Field label="Design intent">
           <textarea
             className={`${fieldControlClass} min-h-32`}
@@ -307,5 +324,7 @@ export function BriefEditor() {
         </Button>
       </div>
     </form>
+    <SystemNarrative projectId={project.id} scopeItems={items} mode="edit" />
+    </div>
   );
 }

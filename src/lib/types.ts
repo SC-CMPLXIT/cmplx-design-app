@@ -81,6 +81,42 @@ export type BriefDraft = {
   scope_items: Pick<ScopeItem, "id" | "in_scope" | "note">[];
 };
 
+export type ProjectSpace = {
+  id: string;
+  project_id: string;
+  name: string;
+  sort_order: number;
+  note: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+};
+
+/** category_key null is the whole-space overview. */
+export type SpaceSystemNarrative = {
+  id: string;
+  space_id: string;
+  category_key: string | null;
+  body: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SpaceDraft = {
+  name: string;
+  note: string;
+};
+
+export type NarrativeDraft = {
+  category_key: string | null;
+  body: string;
+};
+
+export type SpaceBundle = {
+  spaces: ProjectSpace[];
+  narratives: SpaceSystemNarrative[];
+};
+
 export type AuthUser = {
   email: string;
   displayName: string;
