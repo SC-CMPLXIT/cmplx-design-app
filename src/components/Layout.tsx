@@ -4,7 +4,7 @@ import { useAuth } from "@/lib/auth";
 import { Button } from "./ui";
 
 export function Layout({ children }: { children: ReactNode }) {
-  const { user, mode, signOut, resetDemo } = useAuth();
+  const { user, mode, notice, clearNotice, signOut, resetDemo } = useAuth();
 
   return (
     <div className="min-h-screen">
@@ -20,6 +20,19 @@ export function Layout({ children }: { children: ReactNode }) {
             onClick={resetDemo}
           >
             Reset demo data
+          </button>
+        </div>
+      ) : null}
+
+      {notice ? (
+        <div className="no-print border-b border-emerald-300 bg-emerald-50 px-4 py-2 text-center text-sm text-emerald-950">
+          {notice}{" "}
+          <button
+            type="button"
+            className="underline underline-offset-2"
+            onClick={clearNotice}
+          >
+            Dismiss
           </button>
         </div>
       ) : null}

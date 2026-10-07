@@ -1,11 +1,13 @@
 import { Outlet } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
+import { EditorCheckFailed } from "./EditorCheckFailed";
 import { Landing } from "./Landing";
 import { Layout } from "./Layout";
 import { NotEditor } from "./NotEditor";
+import { SetPassword } from "./SetPassword";
 
 export function Gate() {
-  const { loading, user, isEditor } = useAuth();
+  const { loading, mode, user, isEditor, editorCheckFailed, passwordRecovery } = useAuth();
 
   if (loading) {
     return (
@@ -16,7 +18,9 @@ export function Gate() {
   }
 
   if (!user) return <Landing />;
+  if (editorCheckFailed) return <EditorCheckFailed />;
   if (!isEditor) return <NotEditor />;
+  if (mode === "supabase" && passwordRecovery) return <SetPassword />;
 
   return (
     <Layout>
