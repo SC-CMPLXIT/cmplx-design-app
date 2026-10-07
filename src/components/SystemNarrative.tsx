@@ -126,20 +126,30 @@ export function SystemNarrative({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const actionLock = useRef(false);
+  const loadGeneration = useRef(0);
 
   useEffect(() => {
+    const generation = ++loadGeneration.current;
     let cancelled = false;
     setLoading(true);
     void (async () => {
       try {
         const bundle = await api.getSpaceBundle(projectId);
-        if (cancelled) return;
+        if (cancelled || generation !== loadGeneration.current) return;
         const ordered = [...bundle.spaces].sort(
           (a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name),
         );
         setSpaces(ordered);
         setNarratives(bundle.narratives);
-        setForms(formsFrom(ordered, bundle.narratives));
+        const loadedForms = formsFrom(ordered, bundle.narratives);
+        setForms((current) => {
+          if (Object.keys(current).length === 0) return loadedForms;
+          const next = { ...loadedForms };
+          for (const [id, form] of Object.entries(current)) {
+            if (next[id]) next[id] = form;
+          }
+          return next;
+        });
         setOpenId((current) =>
           current && ordered.some((space) => space.id === current)
             ? current
@@ -168,8 +178,7 @@ export function SystemNarrative({
 
   function patchForm(spaceId: string, patch: Partial<SpaceForm>) {
     setForms((current) => {
-      const existing = current[spaceId];
-      if (!existing) return current;
+      const existing = current[spaceId] ?? { name: "", note: "", bodies: {} };
       return { ...current, [spaceId]: { ...existing, ...patch } };
     });
   }
