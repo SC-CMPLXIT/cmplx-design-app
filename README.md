@@ -60,12 +60,40 @@ npm run preview
    - `db/001_schema.sql` — enums, tables, triggers, standard-15 categories
    - `db/002_rls.sql` — `is_editor()`, grants, editor-only policies
    - `db/003_seed.sql` — optional DEMO rows + `editor@demo.cmplx`
-3. Authentication → add an Auth user whose email is in `public.editors`.
-   Replace the demo email with a real CMPLX editor before anything live.
-4. Auth → URL configuration: add `http://localhost:5173` and the Vercel origin.
+3. Invite each editor (allowlist row + Auth invite). See below.
+4. Auth → URL configuration: Site URL `https://cmplx-design-app.vercel.app`, plus redirect URLs for that origin and `http://localhost:5173`.
 5. Put the project URL and **publishable** (legacy: anon) key in Vercel / `.env.local`.
 
-Editors table is an allowlist. Sign-in alone is not enough — the email must match `editors.email`. Mutations to `editors` are SQL / service-role only.
+Editors table is an allowlist. Sign-in alone is not enough — the email must match `editors.email`. Mutations to `editors` are SQL / service-role only. The app does not offer public signup. Magic links use `shouldCreateUser: false`, so an email link only works after the Auth user exists.
+
+## Invite an editor
+
+Both steps are required. Mail goes out through Supabase's built-in mailer.
+
+1. Insert the email into `public.editors` (SQL editor or service role). Match the invite address; `is_editor()` compares case-insensitively.
+
+```sql
+insert into public.editors (email, display_name)
+values ('sc@cmplxit.io', 'SC')
+on conflict (email) do nothing;
+```
+
+2. In the Supabase dashboard, Authentication → Users → Invite user, with that same email. The invite link signs them in and opens the app. To choose a password afterward, use **Forgot password** on the sign-in page. **Email link** also works once that Auth user exists.
+
+3. Confirm URL configuration allows the redirect:
+   - Site URL: `https://cmplx-design-app.vercel.app`
+   - Redirect URLs: `https://cmplx-design-app.vercel.app` and `http://localhost:5173`
+
+`sc@cmplxit.io` is already on `editors` and is a confirmed Auth user. Skip the insert. If an old invite link fails, open the live app, choose **Email link** or **Forgot password**, and use `sc@cmplxit.io`. Expired links are one-time; the sign-in page explains how to request another.
+
+Someone who can sign in but is missing from `editors` sees the not-editor screen. They contact CMPLX to be added. There is no in-app signup.
+
+### Check the Vercel deploy
+
+1. Open https://cmplx-design-app.vercel.app signed out. The landing page separates email link and password, and says invites come from CMPLX.
+2. Open https://cmplx-design-app.vercel.app/#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired and confirm the expired-link message, then request a new link for an Auth user that already exists.
+3. Sign in as an allowlisted editor and confirm the app lands on `/projects`.
+4. An Auth user who is not on `editors` sees the not-editor screen, with contact instructions and sign out.
 
 ## Vercel
 

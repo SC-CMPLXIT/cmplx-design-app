@@ -24,6 +24,9 @@ export function getSupabase() {
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true,
+        // Dashboard invites and built-in magic links redirect with hash tokens.
+        // PKCE would reject those links unless every email template is rewritten.
+        flowType: "implicit",
       },
     });
   }

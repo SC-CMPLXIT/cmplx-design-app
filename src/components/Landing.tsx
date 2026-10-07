@@ -2,37 +2,40 @@ import { FormEvent, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { Banner, Button, ErrorText, Field, fieldControlClass } from "./ui";
 
+type Method = "link" | "password";
+
 export function Landing() {
-  const { mode, signInWithPassword, sendMagicLink, enterDemo, error, notice } =
-    useAuth();
+  const {
+    mode,
+    signInWithPassword,
+    sendMagicLink,
+    sendPasswordReset,
+    enterDemo,
+    error,
+    notice,
+    linkError,
+  } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [method, setMethod] = useState<Method>(linkError ? "link" : "password");
   const [busy, setBusy] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
-  async function onPassword(event: FormEvent) {
-    event.preventDefault();
+  async function run(action: () => Promise<void>) {
     setBusy(true);
     setLocalError(null);
     try {
-      await signInWithPassword(email, password);
+      await action();
     } catch (err) {
-      setLocalError(err instanceof Error ? err.message : "Sign-in failed.");
+      setLocalError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
       setBusy(false);
     }
   }
 
-  async function onMagic() {
-    setBusy(true);
-    setLocalError(null);
-    try {
-      await sendMagicLink(email);
-    } catch (err) {
-      setLocalError(err instanceof Error ? err.message : "Could not send magic link.");
-    } finally {
-      setBusy(false);
-    }
+  function onPassword(event: FormEvent) {
+    event.preventDefault();
+    void run(() => signInWithPassword(email, password));
   }
 
   return (
@@ -49,61 +52,138 @@ export function Landing() {
             Smarter systems. Simpler spaces. Status lives here — not in chat
             threads or a spreadsheet someone stopped updating.
           </p>
+          <p className="mt-4 max-w-md text-sm leading-7 text-paper/60">
+            CMPLX sends the invite. There is no public signup. Open the email
+            link, or come back here if it expired.
+          </p>
         </div>
 
         <div className="rounded-sm border border-white/10 bg-paper p-6 text-ink shadow-[0_20px_60px_rgba(0,0,0,0.25)] sm:p-8">
           <h2 className="font-serif text-3xl">Sign in</h2>
-          <p className="mt-2 text-sm text-ink-soft">
-            Email/password or a magic link. You must be on the{" "}
+          <p className="mt-2 text-sm leading-6 text-ink-soft">
+            Invited, or the link expired? Use an email link. Already chose a
+            password? Sign in with it. Your address must be on the{" "}
             <span className="font-mono text-xs">editors</span> allowlist.
           </p>
 
           {mode === "demo" ? (
             <div className="mt-5 space-y-3">
               <Banner tone="warn">
-                No Supabase env configured. This workspace uses clearly labeled
-                DEMO seed data in local storage.
+                No Supabase env configured. This browser is using labeled demo
+                data. Live editors sign in on the deployed app.
               </Banner>
               <Button type="button" className="w-full" onClick={enterDemo}>
                 Enter demo workspace
               </Button>
             </div>
           ) : (
-            <form className="mt-6 space-y-4" onSubmit={onPassword}>
-              <Field label="Email">
-                <input
-                  className={fieldControlClass}
-                  type="email"
-                  autoComplete="email"
-                  required
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                />
-              </Field>
-              <Field label="Password" hint="Leave blank if you only want a magic link.">
-                <input
-                  className={fieldControlClass}
-                  type="password"
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                />
-              </Field>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Button type="submit" disabled={busy || !password} className="flex-1">
-                  Sign in
-                </Button>
-                <Button
+            <>
+              {linkError ? (
+                <div className="mt-5">
+                  <Banner tone="warn">{linkError}</Banner>
+                </div>
+              ) : null}
+
+              <div
+                className="mt-6 grid grid-cols-2 gap-1 rounded-sm bg-paper-2 p-1"
+                role="group"
+                aria-label="Sign-in method"
+              >
+                <button
                   type="button"
-                  variant="ghost"
-                  disabled={busy || !email}
-                  onClick={() => void onMagic()}
-                  className="flex-1"
+                  aria-pressed={method === "link"}
+                  className={
+                    method === "link"
+                      ? "rounded-sm bg-white px-3 py-2 text-sm font-medium text-ink"
+                      : "rounded-sm px-3 py-2 text-sm text-ink-soft"
+                  }
+                  onClick={() => setMethod("link")}
                 >
-                  Send magic link
-                </Button>
+                  Email link
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={method === "password"}
+                  className={
+                    method === "password"
+                      ? "rounded-sm bg-white px-3 py-2 text-sm font-medium text-ink"
+                      : "rounded-sm px-3 py-2 text-sm text-ink-soft"
+                  }
+                  onClick={() => setMethod("password")}
+                >
+                  Password
+                </button>
               </div>
-            </form>
+
+              {method === "link" ? (
+                <form
+                  className="mt-4 space-y-4"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void run(() => sendMagicLink(email));
+                  }}
+                >
+                  <Field
+                    label="Email"
+                    hint="Use the address CMPLX invited. Email links only work for an existing Auth user."
+                  >
+                    <input
+                      className={fieldControlClass}
+                      type="email"
+                      name="email"
+                      autoComplete="email"
+                      required
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                    />
+                  </Field>
+                  <Button type="submit" disabled={busy || !email} className="w-full">
+                    Email me a sign-in link
+                  </Button>
+                </form>
+              ) : (
+                <form className="mt-4 space-y-4" onSubmit={onPassword}>
+                  <Field label="Email">
+                    <input
+                      className={fieldControlClass}
+                      type="email"
+                      name="email"
+                      autoComplete="email"
+                      required
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                    />
+                  </Field>
+                  <Field label="Password">
+                    <input
+                      className={fieldControlClass}
+                      type="password"
+                      name="password"
+                      autoComplete="current-password"
+                      required
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                    />
+                  </Field>
+                  <Button type="submit" disabled={busy || !password} className="w-full">
+                    Sign in
+                  </Button>
+                  <button
+                    type="button"
+                    className="text-sm text-ink-soft underline underline-offset-2 hover:text-ink disabled:opacity-50"
+                    disabled={busy || !email}
+                    onClick={() => void run(() => sendPasswordReset(email))}
+                  >
+                    Forgot password? Email me a reset link
+                  </button>
+                  {!email ? (
+                    <p className="text-xs text-ink-soft">
+                      Enter your email to request a reset link.
+                    </p>
+                  ) : null}
+                </form>
+              )}
+            </>
           )}
 
           <div className="mt-4 space-y-2">
