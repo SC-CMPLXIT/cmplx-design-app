@@ -34,11 +34,15 @@ This is a clean CMPLX-native product (Vite + React + Tailwind + Supabase). It is
 ## What v1.2 adds
 
 - **Bill of materials** (`bom_items`): equipment lines on a project — name, description, quantity, unit, optional manufacturer / model / SKU, optional space, optional standard-15 category, notes, sort order, soft delete
-- No prices, vendor files, or calculators
+- No prices or vendor files. Cable fill is a separate tool and does not write these lines.
 - Editors add, edit, reorder, and remove lines on the project page, and can filter by space or category
 - The same list prints at the end of the design brief
 - Archiving a space keeps the lines and clears `space_id`
 - Demo mode stores lines in the same `localStorage` seed. An older demo cache picks up the labeled seed lines on next load
+
+## Tools
+
+- **Cable fill** (`/tools/cable-fill`): NEC Chapter 9 conduit fill for editors, including demo mode. Pick conduit type and trade size, add preset or custom cables (outside diameter and count), and read fill percent against Table 1. The screen also draws a cross section and checks Table 2 bend radius, jam ratio, and a best-practice bend/run derate. State stays in the browser session. It does not create projects, briefs, or bill-of-materials lines, and it needs no env vars.
 
 ## What is out of MVP
 
@@ -145,6 +149,7 @@ Someone who can sign in but is missing from `editors` sees the not-editor screen
 - `/projects/new` — create
 - `/projects/:id` — status, notes, space list (add, rename, reorder, remove), bill of materials (`#bill-of-materials`), link/create brief
 - `/projects/:id/brief` — editor + print, including the system narrative (`#system-narrative`) and the bill of materials (`#bill-of-materials`)
+- `/tools/cable-fill` — NEC conduit fill calculator. Linked from the header. Editors and demo mode. No project id. Session state only. Signed-out visitors still see the landing page.
 
 ## Verify spaces (v1.1)
 
@@ -176,3 +181,16 @@ Demo mode, with no Supabase env:
 8. Open **DEMO — Atrium Bar Refresh** and confirm the empty equipment state. **DEMO — Harbor Inn Guest Rooms** has three lines (84 panels, 84 locks, 12 corridor access points).
 
 Live Supabase: run `db/005_bom.sql` after 001–004, sign in as an allowlisted editor, and repeat steps 2–8. The 003 DEMO projects get the same sample lines when that seed and the 004 spaces were applied.
+
+## Verify cable fill
+
+Demo mode, with no Supabase env:
+
+1. `npm run dev` and choose **Enter demo workspace**. Open **Cable fill** in the header.
+2. The sample EMT 1" run (eight Cat6A UTP plus one 12-strand fiber, two 90° bends, 75 ft) reads over the recommended limit. The cross section, fill bar, and status all show that.
+3. Change the trade size to 2". Fill drops inside the limit.
+4. Add a preset, then a custom cable (name, OD, quantity). **Clear all** returns the empty state.
+5. Set one cable quantity to 3 and confirm a jam-ratio line. Set 90° bends to 5 and confirm the 360° failure.
+6. At about 390px wide, the header, cable rows, and fill panel stay inside the viewport.
+
+Signed out, `/tools/cable-fill` stays on the landing page. An allowlisted editor in live mode uses the same route after sign-in.

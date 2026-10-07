@@ -38,14 +38,14 @@ export function Layout({ children }: { children: ReactNode }) {
       ) : null}
 
       <header className="no-print border-b border-rule bg-ink text-paper">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3 sm:px-6">
           <Link to="/projects" className="flex items-baseline gap-2">
             <span className="font-serif text-2xl tracking-tight">CMPLX iT</span>
             <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-paper/70">
               Design_
             </span>
           </Link>
-          <nav className="flex items-center gap-5 text-sm">
+          <nav className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
             <NavLink
               to="/projects"
               className={({ isActive }) =>
@@ -53,6 +53,14 @@ export function Layout({ children }: { children: ReactNode }) {
               }
             >
               Projects
+            </NavLink>
+            <NavLink
+              to="/tools/cable-fill"
+              className={({ isActive }) =>
+                isActive ? "text-paper" : "text-paper/70 hover:text-paper"
+              }
+            >
+              Cable fill
             </NavLink>
             <span className="hidden font-mono text-[11px] text-paper/55 sm:inline">
               {user?.email}

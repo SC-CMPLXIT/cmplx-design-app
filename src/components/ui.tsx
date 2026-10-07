@@ -86,12 +86,13 @@ export function Banner({
   tone = "paper",
 }: {
   children: ReactNode;
-  tone?: "paper" | "warn" | "ok";
+  tone?: "paper" | "warn" | "ok" | "danger";
 }) {
   const tones = {
     paper: "border-rule bg-paper-2 text-ink-soft",
     warn: "border-amber-300 bg-amber-50 text-amber-950",
     ok: "border-emerald-300 bg-emerald-50 text-emerald-950",
+    danger: "border-rose-300 bg-rose-50 text-rose-950",
   };
   return (
     <div className={cn("rounded-sm border px-3 py-2 text-sm", tones[tone])}>{children}</div>
