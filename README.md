@@ -31,9 +31,18 @@ This is a clean CMPLX-native product (Vite + React + Tailwind + Supabase). It is
 - The three project-level narratives stay. Spaces do not replace them
 - Demo mode stores spaces and narratives in the same `localStorage` seed. An older demo cache picks up the labeled seed spaces on next load
 
+## What v1.2 adds
+
+- **Bill of materials** (`bom_items`): equipment lines on a project — name, description, quantity, unit, optional manufacturer / model / SKU, optional space, optional standard-15 category, notes, sort order, soft delete
+- No prices, vendor files, or calculators
+- Editors add, edit, reorder, and remove lines on the project page, and can filter by space or category
+- The same list prints at the end of the design brief
+- Archiving a space keeps the lines and clears `space_id`
+- Demo mode stores lines in the same `localStorage` seed. An older demo cache picks up the labeled seed lines on next load
+
 ## What is out of MVP
 
-Partners, exec share links, finance, RAID, equipment and BoM quantities, file uploads, SharePoint, Tract, Soho House account-manager features, the full S1–S8 storyboard, and Granola design-review import.
+Partners, exec share links, finance, RAID, file uploads, SharePoint, Tract, Soho House account-manager features, the full S1–S8 storyboard, and Granola design-review import.
 
 ## Environment
 
@@ -68,8 +77,11 @@ npm run preview
    - `db/002_rls.sql` — `is_editor()`, grants, editor-only policies
    - `db/003_seed.sql` — optional DEMO rows + `editor@demo.cmplx`
    - `db/004_spaces_narrative.sql` — `project_spaces`, `space_system_narratives`, editor RLS, DEMO spaces when the 003 projects exist
+   - `db/005_bom.sql` — `bom_items`, editor RLS, DEMO equipment lines when the 003 projects and 004 spaces exist
 
    Apply `004` before using a build that includes v1.1. It needs Postgres 15+ (`UNIQUE NULLS NOT DISTINCT`), which is the Supabase default. Editors get select, insert, and update only — removing a space sets `deleted_at`. There is no client delete grant. `004` also revokes the default anon grants Supabase puts on new tables.
+
+   Apply `005` before using a build that includes v1.2. It is safe to re-run the DEMO insert (`on conflict do nothing`). Editors get select, insert, and update only — removing a line sets `deleted_at`. `005` revokes the default anon grants Supabase puts on the new table. Archiving a space (setting `project_spaces.deleted_at`) clears `bom_items.space_id` for that room; the lines stay on the project.
 3. Invite each editor (allowlist row + Auth invite). See below.
 4. Auth → URL configuration: Site URL `https://cmplx-design-app.vercel.app`, plus redirect URLs for that origin and `http://localhost:5173`.
 5. Put the project URL and **publishable** (legacy: anon) key in Vercel / `.env.local`.
@@ -112,7 +124,7 @@ Someone who can sign in but is missing from `editors` sees the not-editor screen
 - Env: `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`
 - SPA fallback is already in `vercel.json`
 
-## Domain model (v1)
+## Domain model
 
 | Table | Notes |
 | --- | --- |
@@ -124,14 +136,15 @@ Someone who can sign in but is missing from `editors` sees the not-editor screen
 | `brief_scope_items` | Per-brief checklist rows |
 | `project_spaces` | Rooms or zones on a project. `name`, `sort_order`, `note`, `deleted_at` |
 | `space_system_narratives` | Per space. `category_key` null is the overview; otherwise a standard-15 key. One row per `(space_id, category_key)` |
+| `bom_items` | Equipment lines on a project. Quantity is `numeric(12,3)`. `space_id` and `category_key` are optional. `deleted_at` removes a line |
 
 ## App map
 
 - `/` → redirects to `/projects` (signed-out users see the landing gate)
 - `/projects` — list + status pills
 - `/projects/new` — create
-- `/projects/:id` — status, notes, space list (add, rename, reorder, remove), link/create brief
-- `/projects/:id/brief` — editor + print, including the system narrative (`#system-narrative`)
+- `/projects/:id` — status, notes, space list (add, rename, reorder, remove), bill of materials (`#bill-of-materials`), link/create brief
+- `/projects/:id/brief` — editor + print, including the system narrative (`#system-narrative`) and the bill of materials (`#bill-of-materials`)
 
 ## Verify spaces (v1.1)
 
@@ -148,3 +161,18 @@ Demo mode, with no Supabase env:
 **DEMO — Harbor Inn Guest Rooms** is a second check: Guest rooms and Circulation, with category notes only for systems in scope on that brief.
 
 Live Supabase: run `db/004_spaces_narrative.sql` after 001–003, sign in as an allowlisted editor, and repeat steps 2–7. The 003 DEMO projects get the same sample spaces when that seed was applied.
+
+## Verify the bill of materials (v1.2)
+
+Demo mode, with no Supabase env:
+
+1. `npm run dev` and choose **Enter demo workspace**. A demo cache from before v1.2 picks up the seed lines on next load. Use **Reset demo data** if you want the labeled seed back in full.
+2. Open **DEMO — North Dock Clubhouse**. Under **Bill of materials**, confirm five lines: ceiling access point (Lobby, wireless, qty 8), members door reader, dock-side projector, service-corridor cabinet, and 500 m of category cable. Manufacturer on the seed rows is `DEMO`.
+3. Filter to Lobby, then to wireless. Clear both filters. Move a line with Up / Down, change a quantity to `12.5` and the unit to `m`, and **Save bill of materials**. Reload and confirm the order and the quantity.
+4. **Add line** (name only). Set a space and an in-scope category, then save. Reload and confirm the line is still there.
+5. **Remove** a line, reload, and confirm it is gone.
+6. Open the brief and print (or print preview). The bill of materials is the last section, with quantity, item, space, category, and notes, and without the add / save controls.
+7. On the project page, remove a space that has equipment. Save spaces, reload the bill of materials, and confirm those lines are still there with space **Unassigned**.
+8. Open **DEMO — Atrium Bar Refresh** and confirm the empty equipment state. **DEMO — Harbor Inn Guest Rooms** has three lines (84 panels, 84 locks, 12 corridor access points).
+
+Live Supabase: run `db/005_bom.sql` after 001–004, sign in as an allowlisted editor, and repeat steps 2–8. The 003 DEMO projects get the same sample lines when that seed and the 004 spaces were applied.

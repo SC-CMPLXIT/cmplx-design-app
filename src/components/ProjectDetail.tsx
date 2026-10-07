@@ -11,6 +11,7 @@ import {
   type ProjectStatus,
   type StatusUpdate,
 } from "@/lib/types";
+import { BillOfMaterials } from "./BillOfMaterials";
 import { StatusNotes } from "./StatusNotes";
 import { StatusPill } from "./StatusPill";
 import { SystemNarrative } from "./SystemNarrative";
@@ -244,12 +245,13 @@ export function ProjectDetail() {
             <Link className="underline underline-offset-2" to={`/projects/${project.id}/brief`}>
               Edit header, checklist, project narrative, and system narrative
             </Link>
-            .
+            . The bill of materials below prints with that brief.
           </p>
         ) : (
           <p className="mt-2 text-sm leading-6 text-ink-soft">
             No brief yet. One brief per project — header, standard-15 systems
             checklist, three project narratives, and a system narrative per space.
+            Equipment lines can start before the brief.
           </p>
         )}
       </section>
@@ -259,6 +261,12 @@ export function ProjectDetail() {
         scopeItems={brief?.scope_items ?? []}
         mode="summary"
         narrativeHref={brief ? `/projects/${project.id}/brief#system-narrative` : null}
+      />
+
+      <BillOfMaterials
+        projectId={project.id}
+        scopeItems={brief?.scope_items ?? []}
+        mode="edit"
       />
 
       <StatusNotes updates={updates} onAdd={onAddNote} />

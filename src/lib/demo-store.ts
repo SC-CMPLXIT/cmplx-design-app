@@ -1,6 +1,9 @@
+import { prepareBomDraft, prepareBomName } from "./bom";
 import { TECHNOLOGY_CATEGORIES } from "./categories";
 import type {
   AuthUser,
+  BomItem,
+  BomItemUpdate,
   BriefDraft,
   DesignBrief,
   NarrativeDraft,
@@ -23,6 +26,7 @@ type DemoState = {
   briefs: DesignBrief[];
   spaces: ProjectSpace[];
   narratives: SpaceSystemNarrative[];
+  bomItems: BomItem[];
 };
 
 const DEMO_USER: AuthUser = {
@@ -227,6 +231,179 @@ function seedNarratives(): SpaceSystemNarrative[] {
   ];
 }
 
+function bomItem(
+  id: string,
+  projectId: string,
+  name: string,
+  description: string,
+  quantity: number,
+  unit: string,
+  manufacturer: string,
+  model: string,
+  sku: string,
+  spaceId: string | null,
+  categoryKey: string | null,
+  notes: string,
+  sortOrder: number,
+  stamp: string,
+): BomItem {
+  return {
+    id,
+    project_id: projectId,
+    name,
+    description,
+    quantity,
+    unit,
+    manufacturer,
+    model,
+    sku,
+    space_id: spaceId,
+    category_key: categoryKey,
+    notes,
+    sort_order: sortOrder,
+    created_at: stamp,
+    updated_at: stamp,
+    deleted_at: null,
+  };
+}
+
+function seedBomItems(): BomItem[] {
+  const stamp = "2026-06-02T16:30:00.000Z";
+  const innStamp = "2026-07-18T11:15:00.000Z";
+  const club = "11111111-1111-4111-8111-111111111111";
+  const inn = "22222222-2222-4222-8222-222222222222";
+  return [
+    bomItem(
+      "e1111111-1111-4111-8111-111111111101",
+      club,
+      "Ceiling access point",
+      "Ceiling wireless access point for the public volume.",
+      8,
+      "ea",
+      "DEMO",
+      "AP-CEILING",
+      "DEMO-AP",
+      "a1111111-1111-4111-8111-111111111101",
+      "wireless",
+      "Count locks after the furniture layout.",
+      1,
+      stamp,
+    ),
+    bomItem(
+      "e1111111-1111-4111-8111-111111111102",
+      club,
+      "Members door reader",
+      "Reader for the members entrance.",
+      1,
+      "ea",
+      "DEMO",
+      "READER-MULLION",
+      "",
+      "a1111111-1111-4111-8111-111111111101",
+      "access_control",
+      "Strike in the existing leaf. No turnstile.",
+      2,
+      stamp,
+    ),
+    bomItem(
+      "e1111111-1111-4111-8111-111111111103",
+      club,
+      "Dock-side projector",
+      "Single projector for speech and image.",
+      1,
+      "ea",
+      "DEMO",
+      "PROJECTOR-1",
+      "",
+      "a1111111-1111-4111-8111-111111111102",
+      "av_events",
+      "Long wall. No stage lighting in this phase.",
+      3,
+      stamp,
+    ),
+    bomItem(
+      "e1111111-1111-4111-8111-111111111104",
+      club,
+      "Service-corridor cabinet",
+      "Wall cabinet for the service-corridor IDF.",
+      1,
+      "ea",
+      "DEMO",
+      "CAB-12U",
+      "",
+      "a1111111-1111-4111-8111-111111111103",
+      "structured_cabling",
+      "Off the guest path. No public-facing racks.",
+      4,
+      stamp,
+    ),
+    bomItem(
+      "e1111111-1111-4111-8111-111111111105",
+      club,
+      "Category cable",
+      "Horizontal cable from the IDF.",
+      500,
+      "m",
+      "DEMO",
+      "CABLE-CAT6A",
+      "DEMO-C6A",
+      "a1111111-1111-4111-8111-111111111103",
+      "structured_cabling",
+      "Short runs to the lobby and the dock-side room.",
+      5,
+      stamp,
+    ),
+    bomItem(
+      "e2222222-2222-4222-8222-222222222201",
+      inn,
+      "In-room panel",
+      "In-room entertainment panel, one per key.",
+      84,
+      "ea",
+      "DEMO",
+      "PANEL-ROOM",
+      "",
+      "a2222222-2222-4222-8222-222222222201",
+      "iptv",
+      "Headend stays if it can feed these panels.",
+      1,
+      innStamp,
+    ),
+    bomItem(
+      "e2222222-2222-4222-8222-222222222202",
+      inn,
+      "Guest-room lock",
+      "Lockset for the listed door leaf.",
+      84,
+      "ea",
+      "DEMO",
+      "LOCK-LEAF",
+      "",
+      "a2222222-2222-4222-8222-222222222201",
+      "access_control",
+      "No new frame and no surface maglock.",
+      2,
+      innStamp,
+    ),
+    bomItem(
+      "e2222222-2222-4222-8222-222222222203",
+      inn,
+      "Corridor access point",
+      "Guest wireless along corridors and stairs.",
+      12,
+      "ea",
+      "DEMO",
+      "AP-CORRIDOR",
+      "",
+      "a2222222-2222-4222-8222-222222222202",
+      "wireless",
+      "Staff SSID stays off the guest ceiling where the fabric allows.",
+      3,
+      innStamp,
+    ),
+  ];
+}
+
 function seedState(): DemoState {
   const clubBriefId = "b1111111-1111-4111-8111-111111111111";
   const innBriefId = "b2222222-2222-4222-8222-222222222222";
@@ -365,6 +542,7 @@ function seedState(): DemoState {
     ],
     spaces: seedSpaces(),
     narratives: seedNarratives(),
+    bomItems: seedBomItems(),
   };
 }
 
@@ -390,6 +568,17 @@ function load(): DemoState {
     }
     if (!Array.isArray(parsed.narratives)) {
       parsed.narratives = [];
+      upgraded = true;
+    }
+    if (!Array.isArray(parsed.bomItems)) {
+      const liveSpaces = new Set(
+        parsed.spaces.filter((row) => !row.deleted_at).map((row) => row.id),
+      );
+      parsed.bomItems = seedBomItems().filter(
+        (row) =>
+          parsed.projects.some((project) => project.id === row.project_id) &&
+          (row.space_id == null || liveSpaces.has(row.space_id)),
+      );
       upgraded = true;
     }
     if (upgraded) persist(parsed);
@@ -481,6 +670,12 @@ export const demoApi = {
       const brief = state.briefs.find((row) => row.project_id === id);
       if (brief) brief.deleted_at = project.deleted_at;
       for (const item of state.spaces) {
+        if (item.project_id === id && !item.deleted_at) {
+          item.deleted_at = project.deleted_at;
+          item.updated_at = project.deleted_at;
+        }
+      }
+      for (const item of state.bomItems) {
         if (item.project_id === id && !item.deleted_at) {
           item.deleted_at = project.deleted_at;
           item.updated_at = project.deleted_at;
@@ -655,6 +850,12 @@ export const demoApi = {
       if (!row) throw new Error("Space not found.");
       row.deleted_at = isoNow();
       row.updated_at = row.deleted_at;
+      for (const line of state.bomItems) {
+        if (line.space_id === id && !line.deleted_at) {
+          line.space_id = null;
+          line.updated_at = row.deleted_at;
+        }
+      }
       const project = state.projects.find(
         (item) => item.id === row.project_id && !item.deleted_at,
       );
@@ -695,6 +896,108 @@ export const demoApi = {
       );
       if (project) project.updated_at = now;
       return saved;
+    });
+  },
+
+  listBomItems(projectId: string): BomItem[] {
+    return load()
+      .bomItems.filter((row) => row.project_id === projectId && !row.deleted_at)
+      .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name))
+      .map((row) => ({ ...row }));
+  },
+
+  createBomItem(projectId: string, name: string): BomItem {
+    const trimmed = prepareBomName(name);
+    const now = isoNow();
+    return mutate((state) => {
+      const project = state.projects.find((row) => row.id === projectId && !row.deleted_at);
+      if (!project) throw new Error("Project not found.");
+      const sortOrder =
+        state.bomItems
+          .filter((row) => row.project_id === projectId && !row.deleted_at)
+          .reduce((max, row) => Math.max(max, row.sort_order), 0) + 1;
+      const created: BomItem = {
+        id: crypto.randomUUID(),
+        project_id: projectId,
+        name: trimmed,
+        description: "",
+        quantity: 1,
+        unit: "ea",
+        manufacturer: "",
+        model: "",
+        sku: "",
+        space_id: null,
+        category_key: null,
+        notes: "",
+        sort_order: sortOrder,
+        created_at: now,
+        updated_at: now,
+        deleted_at: null,
+      };
+      state.bomItems.push(created);
+      project.updated_at = now;
+      return { ...created };
+    });
+  },
+
+  saveBomItems(projectId: string, updates: BomItemUpdate[]): BomItem[] {
+    const prepared = updates.map((update) => ({
+      id: update.id,
+      draft: prepareBomDraft(update.draft),
+    }));
+    return mutate((state) => {
+      const project = state.projects.find((row) => row.id === projectId && !row.deleted_at);
+      if (!project) throw new Error("Project not found.");
+      const liveSpaces = new Set(
+        state.spaces
+          .filter((row) => row.project_id === projectId && !row.deleted_at)
+          .map((row) => row.id),
+      );
+      const now = isoNow();
+      for (const update of prepared) {
+        if (update.draft.space_id && !liveSpaces.has(update.draft.space_id)) {
+          throw new Error("A line points at a space that is no longer on this project.");
+        }
+        const row = state.bomItems.find(
+          (item) => item.id === update.id && item.project_id === projectId && !item.deleted_at,
+        );
+        if (!row) throw new Error("Equipment line not found.");
+        Object.assign(row, update.draft, { updated_at: now });
+      }
+      project.updated_at = now;
+      return state.bomItems
+        .filter((row) => row.project_id === projectId && !row.deleted_at)
+        .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name))
+        .map((row) => ({ ...row }));
+    });
+  },
+
+  reorderBomItems(projectId: string, orderedIds: string[]) {
+    mutate((state) => {
+      const now = isoNow();
+      orderedIds.forEach((id, index) => {
+        const row = state.bomItems.find(
+          (item) => item.id === id && item.project_id === projectId && !item.deleted_at,
+        );
+        if (!row) throw new Error("Equipment line not found.");
+        row.sort_order = index + 1;
+        row.updated_at = now;
+      });
+      const project = state.projects.find((item) => item.id === projectId && !item.deleted_at);
+      if (project) project.updated_at = now;
+    });
+  },
+
+  archiveBomItem(id: string) {
+    mutate((state) => {
+      const row = state.bomItems.find((item) => item.id === id && !item.deleted_at);
+      if (!row) throw new Error("Equipment line not found.");
+      row.deleted_at = isoNow();
+      row.updated_at = row.deleted_at;
+      const project = state.projects.find(
+        (item) => item.id === row.project_id && !item.deleted_at,
+      );
+      if (project) project.updated_at = row.deleted_at;
     });
   },
 };

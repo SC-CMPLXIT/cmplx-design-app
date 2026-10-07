@@ -1,7 +1,10 @@
+import { prepareBomDraft, prepareBomName } from "./bom";
 import { TECHNOLOGY_CATEGORIES } from "./categories";
 import { demoApi } from "./demo-store";
 import { getSupabase, isSupabaseConfigured } from "./supabase";
 import type {
+  BomItem,
+  BomItemUpdate,
   BriefDraft,
   DesignBrief,
   NarrativeDraft,
@@ -140,6 +143,12 @@ export const api = {
       .eq("project_id", id)
       .is("deleted_at", null);
     requireMessage(spaceError, "Could not archive project.");
+    const { error: bomError } = await supabase
+      .from("bom_items")
+      .update({ deleted_at: now })
+      .eq("project_id", id)
+      .is("deleted_at", null);
+    requireMessage(bomError, "Could not archive project.");
   },
 
   async listStatusUpdates(projectId: string): Promise<StatusUpdate[]> {
@@ -404,7 +413,155 @@ export const api = {
     await touchProject((space as { project_id: string }).project_id);
     return saved;
   },
+
+  async listBomItems(projectId: string): Promise<BomItem[]> {
+    if (!isSupabaseConfigured) return demoApi.listBomItems(projectId);
+    const { data, error } = await getSupabase()
+      .from("bom_items")
+      .select("*")
+      .eq("project_id", projectId)
+      .is("deleted_at", null)
+      .order("sort_order", { ascending: true })
+      .order("name", { ascending: true });
+    requireMessage(error, "Could not load bill of materials.");
+    return (data ?? []).map((row) => asBomItem(row as RawBomItem));
+  },
+
+  async createBomItem(projectId: string, name: string): Promise<BomItem> {
+    if (!isSupabaseConfigured) return demoApi.createBomItem(projectId, name);
+    const trimmed = prepareBomName(name);
+    const supabase = getSupabase();
+    const { data: last, error: lastError } = await supabase
+      .from("bom_items")
+      .select("sort_order")
+      .eq("project_id", projectId)
+      .is("deleted_at", null)
+      .order("sort_order", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    requireMessage(lastError, "Could not add equipment line.");
+    const sortOrder = ((last as { sort_order: number } | null)?.sort_order ?? 0) + 1;
+    const { data, error } = await supabase
+      .from("bom_items")
+      .insert({
+        project_id: projectId,
+        name: trimmed,
+        sort_order: sortOrder,
+      })
+      .select("*")
+      .single();
+    requireMessage(error, "Could not add equipment line.");
+    await touchProject(projectId);
+    return asBomItem(data as RawBomItem);
+  },
+
+  async saveBomItems(projectId: string, updates: BomItemUpdate[]): Promise<BomItem[]> {
+    if (!isSupabaseConfigured) return demoApi.saveBomItems(projectId, updates);
+    const prepared = updates.map((update) => ({
+      id: update.id,
+      draft: prepareBomDraft(update.draft),
+    }));
+    await assertBomSpaces(
+      projectId,
+      prepared.map((update) => update.draft.space_id),
+    );
+    const supabase = getSupabase();
+    await Promise.all(
+      prepared.map(async (update) => {
+        const { data, error } = await supabase
+          .from("bom_items")
+          .update(update.draft)
+          .eq("id", update.id)
+          .eq("project_id", projectId)
+          .is("deleted_at", null)
+          .select("id")
+          .maybeSingle();
+        requireMessage(error, "Could not save bill of materials.");
+        if (!data) throw new Error("Equipment line not found.");
+      }),
+    );
+    await touchProject(projectId);
+    return api.listBomItems(projectId);
+  },
+
+  async reorderBomItems(projectId: string, orderedIds: string[]): Promise<void> {
+    if (!isSupabaseConfigured) {
+      demoApi.reorderBomItems(projectId, orderedIds);
+      return;
+    }
+    const supabase = getSupabase();
+    await Promise.all(
+      orderedIds.map(async (id, index) => {
+        const { error } = await supabase
+          .from("bom_items")
+          .update({ sort_order: index + 1 })
+          .eq("id", id)
+          .eq("project_id", projectId)
+          .is("deleted_at", null);
+        requireMessage(error, "Could not reorder bill of materials.");
+      }),
+    );
+    await touchProject(projectId);
+  },
+
+  async archiveBomItem(id: string): Promise<void> {
+    if (!isSupabaseConfigured) {
+      demoApi.archiveBomItem(id);
+      return;
+    }
+    const now = new Date().toISOString();
+    const { data, error } = await getSupabase()
+      .from("bom_items")
+      .update({ deleted_at: now })
+      .eq("id", id)
+      .is("deleted_at", null)
+      .select("project_id")
+      .single();
+    requireMessage(error, "Could not remove equipment line.");
+    await touchProject((data as { project_id: string }).project_id);
+  },
 };
+
+type RawBomItem = Omit<BomItem, "quantity" | "description" | "unit" | "manufacturer" | "model" | "sku" | "notes"> & {
+  quantity: number | string;
+  description: string | null;
+  unit: string | null;
+  manufacturer: string | null;
+  model: string | null;
+  sku: string | null;
+  notes: string | null;
+};
+
+function asBomItem(row: RawBomItem): BomItem {
+  return {
+    ...row,
+    quantity: Number(row.quantity),
+    description: row.description ?? "",
+    unit: row.unit || "ea",
+    manufacturer: row.manufacturer ?? "",
+    model: row.model ?? "",
+    sku: row.sku ?? "",
+    notes: row.notes ?? "",
+    space_id: row.space_id ?? null,
+    category_key: row.category_key ?? null,
+  };
+}
+
+async function assertBomSpaces(projectId: string, spaceIds: Array<string | null>) {
+  const needed = [...new Set(spaceIds.filter((id): id is string => Boolean(id)))];
+  if (needed.length === 0) return;
+  const { data, error } = await getSupabase()
+    .from("project_spaces")
+    .select("id")
+    .eq("project_id", projectId)
+    .is("deleted_at", null)
+    .in("id", needed);
+  requireMessage(error, "Could not save bill of materials.");
+  const live = new Set((data ?? []).map((row) => (row as { id: string }).id));
+  if (needed.some((id) => !live.has(id))) {
+    throw new Error("A line points at a space that is no longer on this project.");
+  }
+}
 
 async function touchProject(projectId: string) {
   const { error } = await getSupabase()
