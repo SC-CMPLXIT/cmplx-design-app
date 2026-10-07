@@ -259,7 +259,12 @@ export function SystemNarrative({
 
   function onRemove(space: ProjectSpace) {
     const label = forms[space.id]?.name.trim() || space.name;
-    if (!window.confirm(`Remove “${label}”? Its system narrative leaves this project.`)) return;
+    if (
+      !window.confirm(
+        `Remove “${label}”? Its system narrative leaves this project. Equipment lines stay, without this space.`,
+      )
+    )
+      return;
     void run(async () => {
       await api.archiveSpace(space.id);
       const remaining = ordered.filter((item) => item.id !== space.id);

@@ -10,6 +10,7 @@ import {
   type Project,
   type ScopeItem,
 } from "@/lib/types";
+import { BillOfMaterials } from "./BillOfMaterials";
 import { StatusPill } from "./StatusPill";
 import { SystemNarrative } from "./SystemNarrative";
 import { Button, ErrorText, Field, fieldControlClass } from "./ui";
@@ -164,8 +165,8 @@ export function BriefEditor() {
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-soft">
             Header, standard-15 systems, project narrative, then a system
-            narrative for each space. Print this view when you need to share —
-            no PDF pipeline in v1.
+            narrative for each space. The bill of materials prints at the end.
+            Print this view when you need to share — no PDF pipeline in v1.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -325,6 +326,7 @@ export function BriefEditor() {
       </div>
     </form>
     <SystemNarrative projectId={project.id} scopeItems={items} mode="edit" />
+    <BillOfMaterials projectId={project.id} scopeItems={items} mode="read" />
     </div>
   );
 }

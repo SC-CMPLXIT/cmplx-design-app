@@ -20,7 +20,7 @@ Without them, `src/lib/supabase.ts` sets `dataMode` to `demo` and `src/lib/api.t
 ## Layout
 
 ```
-db/                    SQL migrations — apply 001 → 002 → 003 → 004
+db/                    SQL migrations — apply 001 → 002 → 003 → 004 → 005
 src/lib/               types, api, auth, supabase, demo store, categories
 src/components/        screens + small UI primitives
 ```
@@ -37,17 +37,18 @@ After Auth sign-in, resolve the allowlist row (`editors.email` ilike jwt email).
 
 - `projects.status`: `pending | on_track | at_risk | behind`
 - `design_briefs.status`: `draft | active | in_review | approved`
-- Soft delete via `deleted_at` (no client HARD DELETE grants on projects, briefs, or spaces)
+- Soft delete via `deleted_at` (no client HARD DELETE grants on projects, briefs, spaces, or BoM lines)
 - One brief per project
 - Checklist: 15 rows from `TECHNOLOGY_CATEGORIES` / `technology_categories`
 - Project narratives: `design_intent`, `constraints`, `open_decisions`
 - v1.1 spaces: `project_spaces` plus `space_system_narratives` (null `category_key` is the overview; otherwise an in-scope standard-15 key)
+- v1.2 bill of materials: `bom_items` on a project. Optional `space_id` and `category_key`. Quantity is `numeric(12,3)`. No prices. Archiving a space clears `space_id` and keeps the line.
 
 ## In / out of MVP
 
-**In:** editor CRUD, project list/detail, status notes, brief editor, print CSS, demo seed, spaces, per-space system narrative.
+**In:** editor CRUD, project list/detail, status notes, brief editor, print CSS, demo seed, spaces, per-space system narrative, project bill of materials.
 
-**Out:** partners, exec links, finance, RAID, equipment / BoM quantities, uploads, SharePoint, Tract, Soho House AM features, S1–S8 storyboard, PDF export, Granola design-review import.
+**Out:** partners, exec links, finance, RAID, uploads, SharePoint, Tract, Soho House AM features, S1–S8 storyboard, PDF export, Granola design-review import.
 
 Do not invent fake production client data. Seed/demo rows must stay labeled `DEMO —`.
 

@@ -117,6 +117,43 @@ export type SpaceBundle = {
   narratives: SpaceSystemNarrative[];
 };
 
+export type BomItem = {
+  id: string;
+  project_id: string;
+  name: string;
+  description: string;
+  quantity: number;
+  unit: string;
+  manufacturer: string;
+  model: string;
+  sku: string;
+  space_id: string | null;
+  category_key: string | null;
+  notes: string;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+};
+
+export type BomItemDraft = {
+  name: string;
+  description: string;
+  quantity: number;
+  unit: string;
+  manufacturer: string;
+  model: string;
+  sku: string;
+  space_id: string | null;
+  category_key: string | null;
+  notes: string;
+};
+
+export type BomItemUpdate = {
+  id: string;
+  draft: BomItemDraft;
+};
+
 export type AuthUser = {
   email: string;
   displayName: string;
