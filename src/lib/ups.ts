@@ -178,3 +178,91 @@ export function formatWh(value: number): string {
 export function formatMinutes(value: number): string {
   return `${value.toFixed(1)} min`;
 }
+
+export function upsGuidance(): string {
+  const tiers = UPS_VA_TIERS.map((tier) => tier.toLocaleString("en-US")).join(", ");
+  return `Size the UPS in VA, not watts. Apparent power is IT watts divided by the power factor (0.9 for typical IT gear, 0.8 when you want a conservative number, 1.0 for a resistive load). Multiply that VA by a 20–30% safety margin — 30% when the rack has to stay up — then pick the smallest common tier that covers it (${tiers} VA). Do not run the load above about 80% of the tier you buy. Runtime in minutes is battery Wh times efficiency divided by 100, divided by load watts, times 60. The other direction solves that same formula for watt-hours.`;
+}
+
+function optionLabel(options: readonly { value: number; label: string }[], raw: string): string {
+  const match = options.find((option) => String(option.value) === raw);
+  return match ? match.label : raw.trim() || "—";
+}
+
+/** Plain-text snapshot of the current run. Session only — nothing is stored. */
+export function formatUpsSummary(input: {
+  devices: Array<{ label: string; watts: string; qty: string }>;
+  powerFactor: string;
+  margin: string;
+  efficiency: string;
+  mode: UpsMode;
+  batteryWh: string;
+  targetMinutes: string;
+  sizing: UpsSizing;
+  printedOn: string;
+}): string {
+  const { sizing } = input;
+  const runtimeText = sizing.runtimeMin == null ? "—" : formatMinutes(sizing.runtimeMin);
+  const batteryText = sizing.batteryWh == null ? "—" : formatWh(sizing.batteryWh);
+  const tierText = sizing.totalW > 0 ? formatVa(sizing.tierVa) : "no tier";
+  const lines = [
+    "CMPLX iT Design — UPS",
+    `${formatWatts(sizing.totalW)} · ${tierText} tier · ${sizing.totalW > 0 ? `${sizing.loadPct}% of tier` : "—"} · ${runtimeText} · ${sizing.status.tone.toUpperCase()}`,
+    `Printed ${input.printedOn}`,
+    "",
+    `Status: ${sizing.status.tone.toUpperCase()}`,
+    sizing.status.label,
+    "",
+    `Devices (${input.devices.length})`,
+  ];
+
+  if (input.devices.length === 0) {
+    lines.push("No devices.");
+  } else {
+    for (const device of input.devices) {
+      const watts = parseUpsNumber(device.watts);
+      const qty = parseUpsNumber(device.qty);
+      const label = device.label.trim() || "Device";
+      lines.push(`${label} — ${formatWatts(watts)} × ${qty} = ${formatWatts(watts * qty)}`);
+    }
+  }
+
+  lines.push(
+    "",
+    "Configuration",
+    `Power factor: ${optionLabel(POWER_FACTORS, input.powerFactor)}`,
+    `Safety margin: ${optionLabel(SAFETY_MARGINS, input.margin)}`,
+    `UPS efficiency: ${input.efficiency.trim() || "0"}%`,
+    input.mode === "battery"
+      ? "Direction: battery watt-hours → runtime"
+      : "Direction: target runtime → battery watt-hours",
+    input.mode === "battery"
+      ? `Battery capacity: ${formatWh(parseUpsNumber(input.batteryWh))}`
+      : `Target runtime: ${input.targetMinutes.trim() || "0"} min`,
+    "",
+    "Sizing",
+    `Total IT load: ${formatWatts(sizing.totalW)}`,
+    `Apparent power: ${formatVa(sizing.apparentVa)}`,
+    `With margin: ${formatVa(sizing.recommendedVa)}`,
+    `UPS tier: ${sizing.totalW > 0 ? formatVa(sizing.tierVa) : "—"}${sizing.totalW > 0 && !sizing.tierInCatalog ? " (above catalog)" : ""}`,
+    `Load of tier: ${sizing.totalW > 0 ? `${sizing.loadPct}%` : "—"}`,
+    `Ceiling: ${UPS_LOAD_CEILING_PCT}%`,
+    `Estimated runtime: ${runtimeText}`,
+    `Battery: ${batteryText}`,
+  );
+
+  if (sizing.totalW > 0) {
+    const over =
+      sizing.loadPct > UPS_LOAD_CEILING_PCT
+        ? " This selection is over the ceiling — step up a tier or drop load."
+        : "";
+    lines.push(
+      "",
+      `Select a ${formatVa(sizing.tierVa)} UPS.`,
+      `IT load is ${sizing.loadPct}% of that tier. Keep it at or under ${UPS_LOAD_CEILING_PCT}%.${over} Estimated runtime ${runtimeText} on ${batteryText}.`,
+    );
+  }
+
+  lines.push("", "Guidance", upsGuidance());
+  return lines.join("\n");
+}

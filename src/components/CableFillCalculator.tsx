@@ -1,17 +1,22 @@
 import { useMemo, useState, type ReactNode } from "react";
 import {
+  CABLE_FILL_GUIDANCE,
   CABLE_PRESETS,
   CONDUIT_KINDS,
   CONDUIT_VIEW,
   assessCableFill,
+  formatCableFillSummary,
   packConduit,
   sizesFor,
   type CableDraft,
   type CablePreset,
   type ConduitKind,
+  type FillAssessment,
   type FillTone,
 } from "@/lib/cable-fill";
 import { cn } from "@/lib/cn";
+import { formatDate, todayIsoDate } from "@/lib/dates";
+import { ToolActions, ToolPrint, ToolPrintSection } from "./ToolActions";
 import { Banner, Button, Field, PageHeader, fieldControlClass } from "./ui";
 
 const CABLE_COLORS = [
@@ -81,6 +86,18 @@ export function CableFillCalculator() {
   const bendById = new Map(assessment.bends.map((row) => [row.id, row]));
   const names = [...new Set(cables.map((cable) => cable.name.trim() || "Cable"))];
   const showNecRing = useRecommended && assessment.recLimit !== assessment.necLimit;
+  const summary = formatCableFillSummary({
+    kind,
+    cables,
+    bends90,
+    bends45,
+    bends225,
+    runLength,
+    bendRadiusOverride,
+    useRecommended,
+    assessment,
+    printedOn: formatDate(todayIsoDate()),
+  });
   const fillHot =
     assessment.fillPct > assessment.activeLimit
       ? "bg-rose-600"
@@ -142,28 +159,33 @@ export function CableFillCalculator() {
 
   return (
     <div
+      className="print-sheet"
       data-cable-fill
       data-status={assessment.status.tone}
       data-fill={assessment.fillPct.toFixed(1)}
       data-limit={String(assessment.activeLimit)}
     >
+      <div className="no-print">
       <PageHeader
         eyebrow="Tools · NEC Chapter 9"
         title="Cable fill"
         description="Conduit fill against Table 1, with Table 2 bend radius, jam ratio, and a best-practice pull derate. Nothing here is saved to a project."
         actions={
-          <p
-            role="status"
-            className={cn(
-              "max-w-full rounded-sm border px-3 py-2 text-sm leading-5",
-              TONE_CLASS[assessment.status.tone],
-            )}
-          >
-            <span className="mr-2 font-mono text-[10px] uppercase tracking-[0.16em]">
-              {assessment.status.tone}
-            </span>
-            {assessment.status.label}
-          </p>
+          <div className="flex max-w-full flex-col gap-3 sm:items-end">
+            <p
+              role="status"
+              className={cn(
+                "max-w-full rounded-sm border px-3 py-2 text-sm leading-5",
+                TONE_CLASS[assessment.status.tone],
+              )}
+            >
+              <span className="mr-2 font-mono text-[10px] uppercase tracking-[0.16em]">
+                {assessment.status.tone}
+              </span>
+              {assessment.status.label}
+            </p>
+            <ToolActions summary={summary} />
+          </div>
         }
       />
 
@@ -556,15 +578,168 @@ export function CableFillCalculator() {
             </div>
           </Panel>
 
-          <Banner>
-            NEC Ch. 9 Table 1 fill: 1 = 53%, 2 = 31%, 3 or more = 40%. Table 2 is the conduit bend
-            radius. Cable bend is outside diameter times the multiplier (TIA or the manufacturer).
-            The derate is best practice — 5% past 90° or 50 ft, 10% past 180° or 100 ft — and still
-            has to clear the 360° pull-point rule. Confirm OD and bend with the cable spec sheet.
-          </Banner>
+          <Banner>{CABLE_FILL_GUIDANCE}</Banner>
         </div>
       </div>
+      </div>
+
+      <CableFillPrint
+        kind={kind}
+        cables={cables}
+        bends90={bends90}
+        bends45={bends45}
+        bends225={bends225}
+        runLength={runLength}
+        useRecommended={useRecommended}
+        assessment={assessment}
+        names={names}
+        showNecRing={showNecRing}
+        placed={packed.placed}
+        packedShown={packed.shown}
+        packedTotal={packed.total}
+      />
     </div>
+  );
+}
+
+function CableFillPrint({
+  kind,
+  cables,
+  bends90,
+  bends45,
+  bends225,
+  runLength,
+  useRecommended,
+  assessment,
+  names,
+  showNecRing,
+  placed,
+  packedShown,
+  packedTotal,
+}: {
+  kind: ConduitKind;
+  cables: CableDraft[];
+  bends90: string;
+  bends45: string;
+  bends225: string;
+  runLength: string;
+  useRecommended: boolean;
+  assessment: FillAssessment;
+  names: string[];
+  showNecRing: boolean;
+  placed: Array<{ x: number; y: number; r: number; name: string }>;
+  packedShown: number;
+  packedTotal: number;
+}) {
+  const bendById = new Map(assessment.bends.map((row) => [row.id, row]));
+  const cableWord = assessment.totalCount === 1 ? "cable" : "cables";
+
+  return (
+    <ToolPrint name="Cable fill" tone={assessment.status.tone} label={assessment.status.label}>
+      <ToolPrintSection title="Conduit">
+        <p>
+          {kind} · {assessment.size}
+        </p>
+        <p>Internal diameter {assessment.spec.id.toFixed(3)} in</p>
+        <p>Internal area {assessment.spec.area.toFixed(3)} in²</p>
+        <p>Table 2 min bend radius {assessment.spec.bendRadius.toFixed(2)} in</p>
+        <p>
+          Bend radius used {assessment.availableBendRadius.toFixed(2)} in (
+          {assessment.usingOverride ? "override" : "Table 2"})
+        </p>
+        <p>Derate {useRecommended ? "on" : "off"}</p>
+      </ToolPrintSection>
+
+      <ToolPrintSection title="Run">
+        <p>
+          90° × {bends90.trim() || "0"} · 45° × {bends45.trim() || "0"} · 22.5° ×{" "}
+          {bends225.trim() || "0"} · {runLength.trim() || "0"} ft
+        </p>
+        <p>
+          Bend total {formatCount(assessment.totalBendDeg)}° / 360° —{" "}
+          {assessment.bendOk ? "within limit" : "exceeds 360°. Add a pull point."}
+        </p>
+      </ToolPrintSection>
+
+      <ToolPrintSection title={`Cables (${formatCount(assessment.totalCount)})`}>
+        {cables.length === 0 ? (
+          <p>No cables.</p>
+        ) : (
+          <ul>
+            {cables.map((cable) => {
+              const bend = bendById.get(cable.id);
+              const bendState =
+                !bend || bend.minR <= 0 ? "not checked" : bend.ok ? "ok" : "over available radius";
+              return (
+                <li key={cable.id}>
+                  {cable.name.trim() || "Cable"} — OD {cable.od.trim() || "0"} in — qty{" "}
+                  {cable.qty.trim() || "0"} — bend {cable.bendMult.trim() || "0"}× OD — min bend{" "}
+                  {bend ? `${bend.minR.toFixed(2)} in` : "—"} — {bendState}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </ToolPrintSection>
+
+      <ToolPrintSection title="Fill">
+        <p>Actual {assessment.fillPct.toFixed(1)}%</p>
+        <p>
+          NEC code limit {assessment.necLimit}% ({formatCount(assessment.totalCount)} {cableWord})
+        </p>
+        <p>
+          Recommended {assessment.recLimit}%
+          {assessment.recLimit < assessment.necLimit
+            ? ` (−${assessment.necLimit - assessment.recLimit}% derate)`
+            : " (no derate)"}
+        </p>
+        <p>
+          Active limit {assessment.activeLimit}% ({useRecommended ? "recommended" : "NEC"})
+        </p>
+        <p>Used area {assessment.usedArea.toFixed(3)} in²</p>
+        <p>Available {assessment.remainingArea.toFixed(3)} in²</p>
+      </ToolPrintSection>
+
+      <ToolPrintSection title="Cross section">
+        <div className="aspect-square w-40 max-w-full">
+          <CrossSection
+            placed={placed}
+            names={names}
+            activeLimit={assessment.activeLimit}
+            necLimit={assessment.necLimit}
+            showNecRing={showNecRing}
+          />
+        </div>
+        <p>
+          Dashed ring is the active limit at {assessment.activeLimit}%.
+          {showNecRing ? ` NEC max is ${assessment.necLimit}%.` : ""}
+        </p>
+        {packedTotal > packedShown ? (
+          <p>
+            Packed {packedShown} of {packedTotal} inside the wall. Area fill still counts every
+            cable.
+          </p>
+        ) : null}
+      </ToolPrintSection>
+
+      <ToolPrintSection title="Jam ratio">
+        {assessment.jamChecks.length === 0 ? (
+          <p>None. Checked when a row is exactly three cables of one outside diameter.</p>
+        ) : (
+          <ul>
+            {assessment.jamChecks.map((check) => (
+              <li key={check.id}>
+                {check.name} — {check.ratio.toFixed(2)} — {check.tone.toUpperCase()} — {check.label}
+              </li>
+            ))}
+          </ul>
+        )}
+      </ToolPrintSection>
+
+      <ToolPrintSection title="Guidance">
+        <p>{CABLE_FILL_GUIDANCE}</p>
+      </ToolPrintSection>
+    </ToolPrint>
   );
 }
 

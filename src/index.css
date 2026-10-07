@@ -110,6 +110,32 @@ textarea {
     padding-bottom: 4px;
   }
 
+  .tool-print {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    color: black;
+    background: white;
+  }
+
+  .tool-print,
+  .tool-print * {
+    max-width: 100%;
+  }
+
+  .tool-print section {
+    break-inside: avoid;
+  }
+
+  .tool-print ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .tool-print svg {
+    height: auto;
+  }
+
   input,
   textarea,
   select {

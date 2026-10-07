@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
+import { formatDate, todayIsoDate } from "@/lib/dates";
 import {
   DEFAULT_UPS_CONFIG,
   DEFAULT_UPS_DEVICES,
@@ -7,18 +8,21 @@ import {
   SAFETY_MARGINS,
   UPS_LOAD_CEILING_PCT,
   UPS_PRESETS,
-  UPS_VA_TIERS,
   formatMinutes,
+  formatUpsSummary,
   formatVa,
   formatWatts,
   formatWh,
   parseUpsNumber,
   sizeUps,
+  upsGuidance,
   upsPreset,
   type UpsMode,
   type UpsPresetKey,
+  type UpsSizing,
   type UpsTone,
 } from "@/lib/ups";
+import { ToolActions, ToolPrint, ToolPrintSection } from "./ToolActions";
 import { Banner, Button, Field, PageHeader, fieldControlClass } from "./ui";
 
 type DeviceRow = {
@@ -135,32 +139,50 @@ export function UpsCalculator() {
   const batteryText = sizing.batteryWh == null ? "—" : formatWh(sizing.batteryWh);
   const derivedRuntime = sizing.runtimeMin == null ? "—" : trimNumber(sizing.runtimeMin, 1);
   const derivedBattery = sizing.batteryWh == null ? "—" : Math.round(sizing.batteryWh).toLocaleString("en-US");
+  const summary = formatUpsSummary({
+    devices,
+    powerFactor,
+    margin,
+    efficiency,
+    mode,
+    batteryWh,
+    targetMinutes,
+    sizing,
+    printedOn: formatDate(todayIsoDate()),
+  });
+  const powerFactorLabel = POWER_FACTORS.find((option) => String(option.value) === powerFactor)?.label ?? powerFactor;
+  const marginLabel = SAFETY_MARGINS.find((option) => String(option.value) === margin)?.label ?? margin;
 
   return (
     <div
+      className="print-sheet"
       data-ups
       data-mode={mode}
       data-status={sizing.status.tone}
       data-load={String(sizing.loadPct)}
       data-tier={String(sizing.tierVa)}
     >
+      <div className="no-print">
       <PageHeader
         eyebrow="Tools · IT load"
         title="UPS"
         description="Size a UPS from IT watts, power factor, and battery runtime. Nothing here is saved to a project, brief, or bill of materials."
         actions={
-          <p
-            role="status"
-            className={cn(
-              "max-w-full rounded-sm border px-3 py-2 text-sm leading-5",
-              TONE_CLASS[sizing.status.tone],
-            )}
-          >
-            <span className="mr-2 font-mono text-[10px] uppercase tracking-[0.16em]">
-              {sizing.status.tone}
-            </span>
-            {sizing.status.label}
-          </p>
+          <div className="flex max-w-full flex-col gap-3 sm:items-end">
+            <p
+              role="status"
+              className={cn(
+                "max-w-full rounded-sm border px-3 py-2 text-sm leading-5",
+                TONE_CLASS[sizing.status.tone],
+              )}
+            >
+              <span className="mr-2 font-mono text-[10px] uppercase tracking-[0.16em]">
+                {sizing.status.tone}
+              </span>
+              {sizing.status.label}
+            </p>
+            <ToolActions summary={summary} />
+          </div>
         }
       />
 
@@ -398,19 +420,115 @@ export function UpsCalculator() {
             </div>
           ) : null}
 
-          <Banner>
-            Size the UPS in VA, not watts. Apparent power is IT watts divided by the power factor
-            (0.9 for typical IT gear, 0.8 when you want a conservative number, 1.0 for a resistive
-            load). Multiply that VA by a 20–30% safety margin — 30% when the rack has to stay up —
-            then pick the smallest common tier that covers it (
-            {UPS_VA_TIERS.map((tier) => tier.toLocaleString("en-US")).join(", ")} VA). Do not run
-            the load above about 80% of the tier you buy. Runtime in minutes is battery Wh times
-            efficiency divided by 100, divided by load watts, times 60. The other direction solves
-            that same formula for watt-hours.
-          </Banner>
+          <Banner>{upsGuidance()}</Banner>
         </div>
       </div>
+      </div>
+
+      <UpsPrint
+        devices={devices}
+        mode={mode}
+        powerFactorLabel={powerFactorLabel}
+        marginLabel={marginLabel}
+        efficiency={efficiency}
+        batteryWh={batteryWh}
+        targetMinutes={targetMinutes}
+        sizing={sizing}
+        runtimeText={runtimeText}
+        batteryText={batteryText}
+      />
     </div>
+  );
+}
+
+function UpsPrint({
+  devices,
+  mode,
+  powerFactorLabel,
+  marginLabel,
+  efficiency,
+  batteryWh,
+  targetMinutes,
+  sizing,
+  runtimeText,
+  batteryText,
+}: {
+  devices: DeviceRow[];
+  mode: UpsMode;
+  powerFactorLabel: string;
+  marginLabel: string;
+  efficiency: string;
+  batteryWh: string;
+  targetMinutes: string;
+  sizing: UpsSizing;
+  runtimeText: string;
+  batteryText: string;
+}) {
+  return (
+    <ToolPrint name="UPS" tone={sizing.status.tone} label={sizing.status.label}>
+      <ToolPrintSection title={`Devices (${devices.length})`}>
+        {devices.length === 0 ? (
+          <p>No devices.</p>
+        ) : (
+          <ul>
+            {devices.map((device) => {
+              const watts = parseUpsNumber(device.watts);
+              const qty = parseUpsNumber(device.qty);
+              return (
+                <li key={device.id}>
+                  {device.label.trim() || "Device"} — {formatWatts(watts)} × {qty} ={" "}
+                  {formatWatts(watts * qty)}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </ToolPrintSection>
+
+      <ToolPrintSection title="Configuration">
+        <p>Power factor {powerFactorLabel}</p>
+        <p>Safety margin {marginLabel}</p>
+        <p>UPS efficiency {efficiency.trim() || "0"}%</p>
+        <p>
+          {mode === "battery"
+            ? "Direction: battery watt-hours → runtime"
+            : "Direction: target runtime → battery watt-hours"}
+        </p>
+        {mode === "battery" ? (
+          <p>Battery capacity {formatWh(parseUpsNumber(batteryWh))}</p>
+        ) : (
+          <p>Target runtime {targetMinutes.trim() || "0"} min</p>
+        )}
+      </ToolPrintSection>
+
+      <ToolPrintSection title="Sizing">
+        <p>Total IT load {formatWatts(sizing.totalW)}</p>
+        <p>Apparent power {formatVa(sizing.apparentVa)}</p>
+        <p>With margin {formatVa(sizing.recommendedVa)}</p>
+        <p>
+          UPS tier {sizing.totalW > 0 ? formatVa(sizing.tierVa) : "—"}
+          {sizing.totalW > 0 && !sizing.tierInCatalog ? " (above catalog)" : ""}
+        </p>
+        <p>Load of tier {sizing.totalW > 0 ? `${sizing.loadPct}%` : "—"}</p>
+        <p>Ceiling {UPS_LOAD_CEILING_PCT}%</p>
+        <p>Estimated runtime {runtimeText}</p>
+        <p>Battery {batteryText}</p>
+        {sizing.totalW > 0 ? (
+          <p>
+            Select a {formatVa(sizing.tierVa)} UPS. IT load is {sizing.loadPct}% of that tier. Keep
+            it at or under {UPS_LOAD_CEILING_PCT}%.
+            {sizing.loadPct > UPS_LOAD_CEILING_PCT
+              ? " This selection is over the ceiling — step up a tier or drop load."
+              : ""}{" "}
+            Estimated runtime {runtimeText} on {batteryText}.
+          </p>
+        ) : null}
+      </ToolPrintSection>
+
+      <ToolPrintSection title="Guidance">
+        <p>{upsGuidance()}</p>
+      </ToolPrintSection>
+    </ToolPrint>
   );
 }
 

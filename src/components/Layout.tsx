@@ -55,20 +55,12 @@ export function Layout({ children }: { children: ReactNode }) {
               Projects
             </NavLink>
             <NavLink
-              to="/tools/cable-fill"
+              to="/tools"
               className={({ isActive }) =>
                 isActive ? "text-paper" : "text-paper/70 hover:text-paper"
               }
             >
-              Cable fill
-            </NavLink>
-            <NavLink
-              to="/tools/ups"
-              className={({ isActive }) =>
-                isActive ? "text-paper" : "text-paper/70 hover:text-paper"
-              }
-            >
-              UPS
+              Tools
             </NavLink>
             <span className="hidden font-mono text-[11px] text-paper/55 sm:inline">
               {user?.email}
