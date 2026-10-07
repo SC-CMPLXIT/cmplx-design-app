@@ -43,6 +43,7 @@ This is a clean CMPLX-native product (Vite + React + Tailwind + Supabase). It is
 ## Tools
 
 - **Cable fill** (`/tools/cable-fill`): NEC Chapter 9 conduit fill for editors, including demo mode. Pick conduit type and trade size, add preset or custom cables (outside diameter and count), and read fill percent against Table 1. The screen also draws a cross section and checks Table 2 bend radius, jam ratio, and a best-practice bend/run derate. State stays in the browser session. It does not create projects, briefs, or bill-of-materials lines, and it needs no env vars.
+- **UPS** (`/tools/ups`): IT-load UPS sizing for editors, including demo mode. Add preset or custom devices (label, watts, quantity), set power factor, safety margin, and UPS efficiency, then either enter battery watt-hours to read runtime or enter a target runtime to read required watt-hours. The screen recommends a common VA tier and marks load percent pass, warn, or fail against an 80% ceiling. State stays in the browser session. It does not create projects, briefs, or bill-of-materials lines, and it needs no env vars.
 
 ## What is out of MVP
 
@@ -150,6 +151,7 @@ Someone who can sign in but is missing from `editors` sees the not-editor screen
 - `/projects/:id` — status, notes, space list (add, rename, reorder, remove), bill of materials (`#bill-of-materials`), link/create brief
 - `/projects/:id/brief` — editor + print, including the system narrative (`#system-narrative`) and the bill of materials (`#bill-of-materials`)
 - `/tools/cable-fill` — NEC conduit fill calculator. Linked from the header. Editors and demo mode. No project id. Session state only. Signed-out visitors still see the landing page.
+- `/tools/ups` — IT-load UPS calculator. Linked from the header. Editors and demo mode. No project id. Session state only. Signed-out visitors still see the landing page.
 
 ## Verify spaces (v1.1)
 
@@ -194,3 +196,16 @@ Demo mode, with no Supabase env:
 6. At about 390px wide, the header, cable rows, and fill panel stay inside the viewport.
 
 Signed out, `/tools/cable-fill` stays on the landing page. An allowlisted editor in live mode uses the same route after sign-in.
+
+## Verify UPS
+
+Demo mode, with no Supabase env:
+
+1. `npm run dev` and choose **Enter demo workspace**. Open **UPS** in the header.
+2. The seed load (two 1U servers, one 24-port switch, one firewall) at power factor 0.9, 25% margin, 94% efficiency, and 2,400 Wh recommends a 750 VA tier, about 76% of that tier (warn, still under 80%), and a runtime in minutes. The derived runtime field is read-only.
+3. Change a quantity or the watts. Totals, tier, load percent, and runtime follow.
+4. Switch to **Runtime → battery**, enter a target in minutes, and confirm required watt-hours is read-only. Switch back and confirm battery watt-hours is editable again.
+5. Raise the load, or use the 20% margin, until load percent of the tier is above 80%. Status reads fail.
+6. At about 390px wide, the header, device rows, and sizing panel stay inside the viewport.
+
+Signed out, `/tools/ups` stays on the landing page. An allowlisted editor in live mode uses the same route after sign-in.

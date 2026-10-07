@@ -21,7 +21,7 @@ Without them, `src/lib/supabase.ts` sets `dataMode` to `demo` and `src/lib/api.t
 
 ```
 db/                    SQL migrations — apply 001 → 002 → 003 → 004 → 005
-src/lib/               types, api, auth, supabase, demo store, categories, cable fill
+src/lib/               types, api, auth, supabase, demo store, categories, cable fill, UPS sizing
 src/components/        screens + small UI primitives
 ```
 
@@ -46,7 +46,7 @@ After Auth sign-in, resolve the allowlist row (`editors.email` ilike jwt email).
 
 ## In / out of MVP
 
-**In:** editor CRUD, project list/detail, status notes, brief editor, print CSS, demo seed, spaces, per-space system narrative, project bill of materials, cable fill calculator (`/tools/cable-fill`, session-local, NEC Chapter 9 — no new tables).
+**In:** editor CRUD, project list/detail, status notes, brief editor, print CSS, demo seed, spaces, per-space system narrative, project bill of materials, cable fill calculator (`/tools/cable-fill`, session-local, NEC Chapter 9 — no new tables), UPS calculator (`/tools/ups`, session-local IT-load sizing — no new tables).
 
 **Out:** partners, exec links, finance, RAID, uploads, SharePoint, Tract, Soho House AM features, S1–S8 storyboard, PDF export, Granola design-review import.
 
