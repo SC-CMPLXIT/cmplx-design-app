@@ -13,6 +13,7 @@ import {
 } from "@/lib/types";
 import { StatusNotes } from "./StatusNotes";
 import { StatusPill } from "./StatusPill";
+import { SystemNarrative } from "./SystemNarrative";
 import { Button, ErrorText, Field, PageHeader, fieldControlClass } from "./ui";
 
 export function ProjectDetail() {
@@ -241,17 +242,24 @@ export function ProjectDetail() {
             Brief owner {brief.owner}. Status{" "}
             <StatusPill status={brief.status} kind="brief" />.{" "}
             <Link className="underline underline-offset-2" to={`/projects/${project.id}/brief`}>
-              Edit header, checklist, and narratives
+              Edit header, checklist, project narrative, and system narrative
             </Link>
             .
           </p>
         ) : (
           <p className="mt-2 text-sm leading-6 text-ink-soft">
-            No brief yet. One brief per project in v1 — header, standard-15
-            systems checklist, and three narrative fields.
+            No brief yet. One brief per project — header, standard-15 systems
+            checklist, three project narratives, and a system narrative per space.
           </p>
         )}
       </section>
+
+      <SystemNarrative
+        projectId={project.id}
+        scopeItems={brief?.scope_items ?? []}
+        mode="summary"
+        narrativeHref={brief ? `/projects/${project.id}/brief#system-narrative` : null}
+      />
 
       <StatusNotes updates={updates} onAdd={onAddNote} />
     </div>
