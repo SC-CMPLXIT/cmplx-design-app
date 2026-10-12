@@ -1,20 +1,29 @@
 import { prepareBomDraft, prepareBomName } from "./bom";
 import { TECHNOLOGY_CATEGORIES } from "./categories";
-import type {
-  AuthUser,
-  BomItem,
-  BomItemUpdate,
-  BriefDraft,
-  DesignBrief,
-  NarrativeDraft,
-  Project,
-  ProjectDraft,
-  ProjectSpace,
-  ScopeItem,
-  SpaceBundle,
-  SpaceDraft,
-  SpaceSystemNarrative,
-  StatusUpdate,
+import { KICKOFF_ANSWER_LIMIT, KICKOFF_QUESTIONS, TECHNOLOGY_SYSTEMS } from "./systems";
+import {
+  QUESTION_ANSWER_STATUSES,
+  type AuthUser,
+  type BomItem,
+  type BomItemUpdate,
+  type BriefDraft,
+  type DesignBrief,
+  type KickoffAnswerDraft,
+  type KickoffBundle,
+  type KickoffQuestion,
+  type KickoffScopeUpdate,
+  type NarrativeDraft,
+  type Project,
+  type ProjectDraft,
+  type ProjectQuestionAnswer,
+  type ProjectSpace,
+  type ProjectSystemScope,
+  type ScopeItem,
+  type SpaceBundle,
+  type SpaceDraft,
+  type SpaceSystemNarrative,
+  type StatusUpdate,
+  type TechnologySystem,
 } from "./types";
 
 const STORAGE_KEY = "cmplx-design-demo-v1";
@@ -27,6 +36,28 @@ type DemoState = {
   spaces: ProjectSpace[];
   narratives: SpaceSystemNarrative[];
   bomItems: BomItem[];
+  systemScope: ProjectSystemScope[];
+  questionAnswers: ProjectQuestionAnswer[];
+};
+
+const CLUB_ID = "11111111-1111-4111-8111-111111111111";
+const INN_ID = "22222222-2222-4222-8222-222222222222";
+const ATRIUM_ID = "33333333-3333-4333-8333-333333333333";
+const DEMO_STAMP = "2026-06-02T16:30:00.000Z";
+
+const DEMO_SCOPE_ON: Record<string, readonly string[]> = {
+  [CLUB_ID]: [
+    "general",
+    "carrier_riser",
+    "it_infrastructure",
+    "network_wifi",
+    "display_video",
+    "audio",
+    "conferencing",
+    "control",
+    "security",
+  ],
+  [INN_ID]: ["it_infrastructure", "network_wifi", "display_video", "security"],
 };
 
 const DEMO_USER: AuthUser = {
@@ -404,6 +435,119 @@ function seedBomItems(): BomItem[] {
   ];
 }
 
+function scopeId(projectId: string, index: number): string {
+  const prefix: Record<string, string> = {
+    [CLUB_ID]: "c1111111-1111-4111-8111-1111111111",
+    [INN_ID]: "c2222222-2222-4222-8222-2222222222",
+    [ATRIUM_ID]: "c3333333-3333-4333-8333-3333333333",
+  };
+  const stem = prefix[projectId];
+  if (!stem) return crypto.randomUUID();
+  return `${stem}${String(index + 1).padStart(2, "0")}`;
+}
+
+function scopeRowsFor(projectId: string, stamp: string): ProjectSystemScope[] {
+  const on = new Set(DEMO_SCOPE_ON[projectId] ?? []);
+  return TECHNOLOGY_SYSTEMS.map((system, index) => ({
+    id: scopeId(projectId, index),
+    project_id: projectId,
+    system_key: system.key,
+    in_scope: on.has(system.key),
+    created_at: stamp,
+    updated_at: stamp,
+  }));
+}
+
+function seedQuestionAnswers(): ProjectQuestionAnswer[] {
+  const rows: Array<Omit<ProjectQuestionAnswer, "created_at" | "updated_at"> & { stamp: string }> = [
+    {
+      id: "f1111111-1111-4111-8111-111111111101",
+      project_id: CLUB_ID,
+      question_key: "general_network_peripherals",
+      body: "DEMO — Service-corridor IDF holds the firewall and switches. Models follow the wireless heat map.",
+      status: "answered",
+      stamp: DEMO_STAMP,
+    },
+    {
+      id: "f1111111-1111-4111-8111-111111111102",
+      project_id: CLUB_ID,
+      question_key: "general_on_prem_servers",
+      body: "DEMO — No on-prem servers. The property system stays in the cloud.",
+      status: "answered",
+      stamp: DEMO_STAMP,
+    },
+    {
+      id: "f1111111-1111-4111-8111-111111111103",
+      project_id: CLUB_ID,
+      question_key: "it_cable_count",
+      body: "DEMO — Two cables at each data outlet. Access points get two as well.",
+      status: "locked",
+      stamp: DEMO_STAMP,
+    },
+    {
+      id: "f1111111-1111-4111-8111-111111111104",
+      project_id: CLUB_ID,
+      question_key: "av_coordination",
+      body: "DEMO — Events AV in the dock-side room is in this package: one image and speech. CMPLX iT owns the technology model.",
+      status: "answered",
+      stamp: DEMO_STAMP,
+    },
+    {
+      id: "f1111111-1111-4111-8111-111111111105",
+      project_id: CLUB_ID,
+      question_key: "security_nvr_split",
+      body: "DEMO — Still confirming who provides the recorder.",
+      status: "open",
+      stamp: DEMO_STAMP,
+    },
+  ];
+  return rows.map(({ stamp, ...row }) => ({
+    ...row,
+    created_at: stamp,
+    updated_at: stamp,
+  }));
+}
+
+function systemsForDemo(): TechnologySystem[] {
+  return TECHNOLOGY_SYSTEMS.map((system) => ({
+    ...system,
+    category_keys: [...system.category_keys],
+  }));
+}
+
+function questionsForDemo(): KickoffQuestion[] {
+  return KICKOFF_QUESTIONS.map((question) => ({
+    ...question,
+    system_keys: [...question.system_keys],
+  }));
+}
+
+function mergeKickoff(state: DemoState): boolean {
+  let changed = false;
+  if (!Array.isArray(state.systemScope)) {
+    state.systemScope = [];
+    changed = true;
+  }
+  if (!Array.isArray(state.questionAnswers)) {
+    const projectIds = new Set(state.projects.map((project) => project.id));
+    state.questionAnswers = seedQuestionAnswers().filter((row) => projectIds.has(row.project_id));
+    changed = true;
+  }
+  for (const project of state.projects) {
+    const have = new Set(
+      state.systemScope
+        .filter((row) => row.project_id === project.id)
+        .map((row) => row.system_key),
+    );
+    for (const row of scopeRowsFor(project.id, project.created_at || DEMO_STAMP)) {
+      if (have.has(row.system_key)) continue;
+      state.systemScope.push(row);
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 function seedState(): DemoState {
   const clubBriefId = "b1111111-1111-4111-8111-111111111111";
   const innBriefId = "b2222222-2222-4222-8222-222222222222";
@@ -543,6 +687,10 @@ function seedState(): DemoState {
     spaces: seedSpaces(),
     narratives: seedNarratives(),
     bomItems: seedBomItems(),
+    systemScope: [CLUB_ID, INN_ID, ATRIUM_ID].flatMap((projectId) =>
+      scopeRowsFor(projectId, DEMO_STAMP),
+    ),
+    questionAnswers: seedQuestionAnswers(),
   };
 }
 
@@ -581,6 +729,7 @@ function load(): DemoState {
       );
       upgraded = true;
     }
+    if (mergeKickoff(parsed)) upgraded = true;
     if (upgraded) persist(parsed);
     return parsed;
   } catch {
@@ -648,6 +797,7 @@ export const demoApi = {
     };
     return mutate((state) => {
       state.projects.unshift(project);
+      state.systemScope.push(...scopeRowsFor(project.id, now));
       return project;
     });
   },
@@ -998,6 +1148,81 @@ export const demoApi = {
         (item) => item.id === row.project_id && !item.deleted_at,
       );
       if (project) project.updated_at = row.deleted_at;
+    });
+  },
+
+  getKickoff(projectId: string): KickoffBundle {
+    const state = load();
+    return {
+      systems: systemsForDemo(),
+      questions: questionsForDemo(),
+      scope: state.systemScope
+        .filter((row) => row.project_id === projectId)
+        .map((row) => ({ ...row })),
+      answers: state.questionAnswers
+        .filter((row) => row.project_id === projectId)
+        .map((row) => ({ ...row })),
+    };
+  },
+
+  saveKickoffAnswer(projectId: string, draft: KickoffAnswerDraft): ProjectQuestionAnswer {
+    if (!QUESTION_ANSWER_STATUSES.includes(draft.status)) {
+      throw new Error("Answer status must be open, answered, or locked.");
+    }
+    if (draft.body.length > KICKOFF_ANSWER_LIMIT) throw new Error("Answer is too long.");
+    if (!KICKOFF_QUESTIONS.some((question) => question.key === draft.question_key)) {
+      throw new Error("Question not found.");
+    }
+    const now = isoNow();
+    return mutate((state) => {
+      const project = state.projects.find((row) => row.id === projectId && !row.deleted_at);
+      if (!project) throw new Error("Project not found.");
+      const existing = state.questionAnswers.find(
+        (row) => row.project_id === projectId && row.question_key === draft.question_key,
+      );
+      if (existing) {
+        existing.body = draft.body;
+        existing.status = draft.status;
+        existing.updated_at = now;
+        project.updated_at = now;
+        return { ...existing };
+      }
+      const created: ProjectQuestionAnswer = {
+        id: crypto.randomUUID(),
+        project_id: projectId,
+        question_key: draft.question_key,
+        body: draft.body,
+        status: draft.status,
+        created_at: now,
+        updated_at: now,
+      };
+      state.questionAnswers.push(created);
+      project.updated_at = now;
+      return { ...created };
+    });
+  },
+
+  setProjectSystemScope(projectId: string, updates: KickoffScopeUpdate[]): ProjectSystemScope[] {
+    if (updates.length === 0) return [];
+    const now = isoNow();
+    return mutate((state) => {
+      const project = state.projects.find((row) => row.id === projectId && !row.deleted_at);
+      if (!project) throw new Error("Project not found.");
+      const saved: ProjectSystemScope[] = [];
+      for (const update of updates) {
+        if (!TECHNOLOGY_SYSTEMS.some((system) => system.key === update.system_key)) {
+          throw new Error("That system is not on this project yet.");
+        }
+        const row = state.systemScope.find(
+          (item) => item.project_id === projectId && item.system_key === update.system_key,
+        );
+        if (!row) throw new Error("That system is not on this project yet.");
+        row.in_scope = update.in_scope;
+        row.updated_at = now;
+        saved.push({ ...row });
+      }
+      project.updated_at = now;
+      return saved;
     });
   },
 };
