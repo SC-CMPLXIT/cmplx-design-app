@@ -1,22 +1,34 @@
 import { prepareBomDraft, prepareBomName } from "./bom";
 import { TECHNOLOGY_CATEGORIES } from "./categories";
 import { demoApi } from "./demo-store";
+import { KICKOFF_ANSWER_LIMIT } from "./systems";
 import { getSupabase, isSupabaseConfigured } from "./supabase";
-import type {
-  BomItem,
-  BomItemUpdate,
-  BriefDraft,
-  DesignBrief,
-  NarrativeDraft,
-  Project,
-  ProjectDraft,
-  ProjectSpace,
-  ScopeItem,
-  SpaceBundle,
-  SpaceDraft,
-  SpaceSystemNarrative,
-  StatusUpdate,
+import {
+  QUESTION_ANSWER_STATUSES,
+  type BomItem,
+  type BomItemUpdate,
+  type BriefDraft,
+  type DesignBrief,
+  type KickoffAnswerDraft,
+  type KickoffBundle,
+  type KickoffQuestion,
+  type KickoffScopeUpdate,
+  type NarrativeDraft,
+  type Project,
+  type ProjectDraft,
+  type ProjectQuestionAnswer,
+  type ProjectSpace,
+  type ProjectSystemScope,
+  type ScopeItem,
+  type SpaceBundle,
+  type SpaceDraft,
+  type SpaceSystemNarrative,
+  type StatusUpdate,
+  type SystemAppliesTo,
+  type TechnologySystem,
 } from "./types";
+
+const KICKOFF_SETUP = "Kickoff is not in this database yet. Apply db/006_kickoff.sql.";
 
 function requireMessage(error: { message: string } | null, fallback: string) {
   if (error) throw new Error(error.message || fallback);
@@ -520,6 +532,77 @@ export const api = {
     requireMessage(error, "Could not remove equipment line.");
     await touchProject((data as { project_id: string }).project_id);
   },
+
+  async getKickoff(projectId: string): Promise<KickoffBundle> {
+    if (!isSupabaseConfigured) return demoApi.getKickoff(projectId);
+    const reference = await loadKickoffReference();
+    await ensureProjectSystemScope(
+      projectId,
+      reference.systems.map((system) => system.key),
+    );
+    const supabase = getSupabase();
+    const [scopeResult, answerResult] = await Promise.all([
+      supabase.from("project_system_scope").select("*").eq("project_id", projectId),
+      supabase.from("project_question_answers").select("*").eq("project_id", projectId),
+    ]);
+    kickoffOrThrow(scopeResult.error, "Could not load kickoff scope.");
+    kickoffOrThrow(answerResult.error, "Could not load kickoff answers.");
+    return {
+      systems: reference.systems,
+      questions: reference.questions,
+      scope: (scopeResult.data ?? []) as ProjectSystemScope[],
+      answers: ((answerResult.data ?? []) as ProjectQuestionAnswer[]).map(asAnswer),
+    };
+  },
+
+  async saveKickoffAnswer(
+    projectId: string,
+    draft: KickoffAnswerDraft,
+  ): Promise<ProjectQuestionAnswer> {
+    if (!isSupabaseConfigured) return demoApi.saveKickoffAnswer(projectId, draft);
+    assertKickoffAnswer(draft);
+    const { data, error } = await getSupabase()
+      .from("project_question_answers")
+      .upsert(
+        {
+          project_id: projectId,
+          question_key: draft.question_key,
+          body: draft.body,
+          status: draft.status,
+        },
+        { onConflict: "project_id,question_key" },
+      )
+      .select("*")
+      .single();
+    kickoffOrThrow(error, "Could not save answer.");
+    await touchProject(projectId);
+    return asAnswer(data as ProjectQuestionAnswer);
+  },
+
+  async setProjectSystemScope(
+    projectId: string,
+    updates: KickoffScopeUpdate[],
+  ): Promise<ProjectSystemScope[]> {
+    if (!isSupabaseConfigured) return demoApi.setProjectSystemScope(projectId, updates);
+    if (updates.length === 0) return [];
+    const supabase = getSupabase();
+    const saved = await Promise.all(
+      updates.map(async (update) => {
+        const { data, error } = await supabase
+          .from("project_system_scope")
+          .update({ in_scope: update.in_scope })
+          .eq("project_id", projectId)
+          .eq("system_key", update.system_key)
+          .select("*")
+          .maybeSingle();
+        kickoffOrThrow(error, "Could not update scope.");
+        if (!data) throw new Error("That system is not on this project yet.");
+        return data as ProjectSystemScope;
+      }),
+    );
+    await touchProject(projectId);
+    return saved;
+  },
 };
 
 type RawBomItem = Omit<BomItem, "quantity" | "description" | "unit" | "manufacturer" | "model" | "sku" | "notes"> & {
@@ -561,6 +644,140 @@ async function assertBomSpaces(projectId: string, spaceIds: Array<string | null>
   if (needed.some((id) => !live.has(id))) {
     throw new Error("A line points at a space that is no longer on this project.");
   }
+}
+
+function kickoffOrThrow(error: { message: string } | null, fallback: string) {
+  if (!error) return;
+  if (
+    /does not exist|schema cache|technology_systems|scope_questions|project_system_scope|project_question_answers|system_category_links/i.test(
+      error.message,
+    )
+  ) {
+    throw new Error(KICKOFF_SETUP);
+  }
+  throw new Error(error.message || fallback);
+}
+
+function assertKickoffAnswer(draft: KickoffAnswerDraft) {
+  if (!QUESTION_ANSWER_STATUSES.includes(draft.status)) {
+    throw new Error("Answer status must be open, answered, or locked.");
+  }
+  if (draft.body.length > KICKOFF_ANSWER_LIMIT) {
+    throw new Error("Answer is too long.");
+  }
+}
+
+function asAnswer(row: ProjectQuestionAnswer): ProjectQuestionAnswer {
+  return {
+    ...row,
+    body: row.body ?? "",
+    status: QUESTION_ANSWER_STATUSES.includes(row.status) ? row.status : "open",
+  };
+}
+
+type RawSystem = {
+  key: string;
+  name: string;
+  description: string | null;
+  sort_order: number;
+  applies_to: SystemAppliesTo;
+};
+
+type RawQuestion = {
+  key: string;
+  bank: KickoffQuestion["bank"];
+  section_key: string;
+  section_name: string;
+  prompt: string;
+  sort_order: number;
+};
+
+async function loadKickoffReference(): Promise<
+  Pick<KickoffBundle, "systems" | "questions">
+> {
+  const supabase = getSupabase();
+  const [systemsResult, questionsResult, linksResult, categoriesResult] = await Promise.all([
+    supabase.from("technology_systems").select("*").order("sort_order", { ascending: true }),
+    supabase
+      .from("scope_questions")
+      .select("*")
+      .eq("bank", "kickoff")
+      .order("sort_order", { ascending: true }),
+    supabase.from("scope_question_systems").select("question_key, system_key"),
+    supabase.from("system_category_links").select("system_key, category_key"),
+  ]);
+  kickoffOrThrow(systemsResult.error, KICKOFF_SETUP);
+  kickoffOrThrow(questionsResult.error, KICKOFF_SETUP);
+  kickoffOrThrow(linksResult.error, KICKOFF_SETUP);
+  kickoffOrThrow(categoriesResult.error, KICKOFF_SETUP);
+
+  const systemsRaw = (systemsResult.data ?? []) as RawSystem[];
+  const questionsRaw = (questionsResult.data ?? []) as RawQuestion[];
+  if (systemsRaw.length === 0 || questionsRaw.length === 0) {
+    throw new Error(KICKOFF_SETUP);
+  }
+
+  const systemOrder = new Map(systemsRaw.map((system) => [system.key, system.sort_order]));
+  const categoryOrder = new Map<string, number>(
+    TECHNOLOGY_CATEGORIES.map((category, index) => [category.key, index]),
+  );
+  const categoriesBySystem = new Map<string, string[]>();
+  for (const link of (categoriesResult.data ?? []) as {
+    system_key: string;
+    category_key: string;
+  }[]) {
+    const list = categoriesBySystem.get(link.system_key) ?? [];
+    list.push(link.category_key);
+    categoriesBySystem.set(link.system_key, list);
+  }
+  const systems: TechnologySystem[] = systemsRaw.map((system) => ({
+    key: system.key,
+    name: system.name,
+    description: system.description ?? "",
+    sort_order: system.sort_order,
+    applies_to: system.applies_to,
+    category_keys: (categoriesBySystem.get(system.key) ?? []).sort(
+      (a, b) => (categoryOrder.get(a) ?? 99) - (categoryOrder.get(b) ?? 99),
+    ),
+  }));
+
+  const systemsByQuestion = new Map<string, string[]>();
+  for (const link of (linksResult.data ?? []) as {
+    question_key: string;
+    system_key: string;
+  }[]) {
+    const list = systemsByQuestion.get(link.question_key) ?? [];
+    list.push(link.system_key);
+    systemsByQuestion.set(link.question_key, list);
+  }
+  const questions: KickoffQuestion[] = questionsRaw.map((question) => ({
+    ...question,
+    system_keys: (systemsByQuestion.get(question.key) ?? []).sort(
+      (a, b) => (systemOrder.get(a) ?? 99) - (systemOrder.get(b) ?? 99),
+    ),
+  }));
+
+  return { systems, questions };
+}
+
+async function ensureProjectSystemScope(projectId: string, systemKeys: string[]) {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("project_system_scope")
+    .select("system_key")
+    .eq("project_id", projectId);
+  kickoffOrThrow(error, "Could not load kickoff scope.");
+  const have = new Set((data ?? []).map((row) => (row as { system_key: string }).system_key));
+  const missing = systemKeys.filter((key) => !have.has(key));
+  if (missing.length === 0) return;
+  const { error: insertError } = await supabase.from("project_system_scope").insert(
+    missing.map((systemKey) => ({
+      project_id: projectId,
+      system_key: systemKey,
+      in_scope: false,
+    })),
+  );
+  kickoffOrThrow(insertError, "Could not prepare kickoff scope.");
 }
 
 async function touchProject(projectId: string) {

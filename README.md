@@ -40,6 +40,16 @@ This is a clean CMPLX-native product (Vite + React + Tailwind + Supabase). It is
 - Archiving a space keeps the lines and clears `space_id`
 - Demo mode stores lines in the same `localStorage` seed. An older demo cache picks up the labeled seed lines on next load
 
+## What v1.3 adds
+
+- **Kickoff questionnaire** at `/projects/:id/kickoff`. One per project. Editors only. No share link.
+- **Systems** (`technology_systems`) are the scope checklist: General, Carrier & riser, IT infrastructure, Network / Wi-Fi, Display / video, Audio, Conferencing, Control, Security, Acoustics. `applies_to` is `project`, `space`, or `both`, so a later Discovery feature can reuse the same keys for per-space checklists, discrepancies, space-guide exports, and proposal scope.
+- **`system_category_links`** maps each system onto the standard-15 brief checklist (a system may match more than one category). Acoustics has no brief category. **Add systems from the brief** turns matching systems on and does not turn any off.
+- **Question bank** (`scope_questions`, `bank = kickoff`) is the basis-of-design questionnaire: General, Carrier service & riser, IT infrastructure, Audio visual, Access control, Video surveillance. `scope_question_systems` says which systems show a question. A question shows when any linked system is in scope. `bank = discovery` is reserved and has no rows yet.
+- **Answers** (`project_question_answers`) store body plus status `open | answered | locked`. They autosave. Locked answers are read-only until an editor sets Open or Answered. Clearing the text does not delete the row. Turning a system off hides its questions and keeps the answers.
+- **Print / PDF** uses the same browser print path as the brief. **Download DOCX** builds a branded questionnaire in the browser (CMPLX iT header, scope, sections, status, answers).
+- Demo mode stores scope and answers in the same `localStorage` seed. An older demo cache picks up the labeled seed on next load. Seed answer text stays prefixed `DEMO —`.
+
 ## Tools
 
 - **Tools index** (`/tools`): short list of the calculators. The header links here. Editors and demo mode. Signed-out visitors still see the landing page.
@@ -84,10 +94,13 @@ npm run preview
    - `db/003_seed.sql` — optional DEMO rows + `editor@demo.cmplx`
    - `db/004_spaces_narrative.sql` — `project_spaces`, `space_system_narratives`, editor RLS, DEMO spaces when the 003 projects exist
    - `db/005_bom.sql` — `bom_items`, editor RLS, DEMO equipment lines when the 003 projects and 004 spaces exist
+   - `db/006_kickoff.sql` — `technology_systems`, `system_category_links`, `scope_questions`, `scope_question_systems`, `project_system_scope`, `project_question_answers`, editor RLS, DEMO scope and answers when the 003 projects exist
 
    Apply `004` before using a build that includes v1.1. It needs Postgres 15+ (`UNIQUE NULLS NOT DISTINCT`), which is the Supabase default. Editors get select, insert, and update only — removing a space sets `deleted_at`. There is no client delete grant. `004` also revokes the default anon grants Supabase puts on new tables.
 
    Apply `005` before using a build that includes v1.2. It is safe to re-run the DEMO insert (`on conflict do nothing`). Editors get select, insert, and update only — removing a line sets `deleted_at`. `005` revokes the default anon grants Supabase puts on the new table. Archiving a space (setting `project_spaces.deleted_at`) clears `bom_items.space_id` for that room; the lines stay on the project.
+
+   Apply `006` before using a build that includes v1.3. It is safe to re-run: system names, prompts, and the scope-to-question mapping refresh, and existing scope flags and answers are left in place (`on conflict do nothing`). Editors get select on the question bank and systems, and select, insert, and update on scope and answers. There is no client delete grant. `006` revokes the default anon grants Supabase puts on the new tables. Signed-out visitors still have no table access.
 3. Invite each editor (allowlist row + Auth invite). See below.
 4. Auth → URL configuration: Site URL `https://cmplx-design-app.vercel.app`, plus redirect URLs for that origin and `http://localhost:5173`.
 5. Put the project URL and **publishable** (legacy: anon) key in Vercel / `.env.local`.
@@ -143,14 +156,21 @@ Someone who can sign in but is missing from `editors` sees the not-editor screen
 | `project_spaces` | Rooms or zones on a project. `name`, `sort_order`, `note`, `deleted_at` |
 | `space_system_narratives` | Per space. `category_key` null is the overview; otherwise a standard-15 key. One row per `(space_id, category_key)` |
 | `bom_items` | Equipment lines on a project. Quantity is `numeric(12,3)`. `space_id` and `category_key` are optional. `deleted_at` removes a line |
+| `technology_systems` | Canonical systems for kickoff and later discovery. `applies_to` is `project`, `space`, or `both` |
+| `system_category_links` | System → standard-15 category. Many-to-many |
+| `scope_questions` | Question bank. `bank` is `kickoff` now; `discovery` is reserved |
+| `scope_question_systems` | Question → systems. Visible when any linked system is in scope |
+| `project_system_scope` | Per-project scope flag. One row per project and system. Shared with later discovery |
+| `project_question_answers` | Per-project answer. `status` is `open`, `answered`, or `locked`. Body up to 8,000 characters |
 
 ## App map
 
 - `/` → redirects to `/projects` (signed-out users see the landing gate)
 - `/projects` — list + status pills
 - `/projects/new` — create
-- `/projects/:id` — status, notes, space list (add, rename, reorder, remove), bill of materials (`#bill-of-materials`), link/create brief
+- `/projects/:id` — status, notes, space list (add, rename, reorder, remove), bill of materials (`#bill-of-materials`), link/create brief, link to kickoff
 - `/projects/:id/brief` — editor + print, including the system narrative (`#system-narrative`) and the bill of materials (`#bill-of-materials`)
+- `/projects/:id/kickoff` — scope checklist, questionnaire, autosave, print/PDF, DOCX. Editors and demo mode. Signed-out visitors still see the landing page.
 - `/tools` — calculator index (cable fill, UPS). Linked from the header. Editors and demo mode. Signed-out visitors still see the landing page.
 - `/tools/cable-fill` — NEC conduit fill calculator. Editors and demo mode. No project id. Session state only. Print and copy summary stay in the browser.
 - `/tools/ups` — IT-load UPS calculator. Editors and demo mode. No project id. Session state only. Print and copy summary stay in the browser.
@@ -185,6 +205,23 @@ Demo mode, with no Supabase env:
 8. Open **DEMO — Atrium Bar Refresh** and confirm the empty equipment state. **DEMO — Harbor Inn Guest Rooms** has three lines (84 panels, 84 locks, 12 corridor access points).
 
 Live Supabase: run `db/005_bom.sql` after 001–004, sign in as an allowlisted editor, and repeat steps 2–8. The 003 DEMO projects get the same sample lines when that seed and the 004 spaces were applied.
+
+## Verify kickoff (v1.3)
+
+Demo mode, with no Supabase env:
+
+1. `npm run dev` and choose **Enter demo workspace**. A demo cache from before v1.3 picks up scope and the labeled answers on next load. Use **Reset demo data** if you want the labeled seed back in full.
+2. Open **DEMO — North Dock Clubhouse** and choose **Kickoff**. General, Carrier & riser, IT infrastructure, Network / Wi-Fi, Display / video, Audio, Conferencing, Control, and Security are on. Acoustics is off and is marked for later discovery when you turn it on.
+3. Confirm answered text on the network-peripherals and on-prem questions, a locked cable-count answer (the field does not accept typing), an answered audio-visual question, and an open draft on the NVR split. Those seed answers start with `DEMO —`.
+4. Clear **General**, **IT infrastructure**, and **Network / Wi-Fi**. The general and infrastructure questions leave. Turn **Network / Wi-Fi** back on. Questions tagged with that system return, and the cable-count answer is still there.
+5. Type into an open answer, wait for **Saved**, reload, and confirm the text is still there. Set it to **Locked**, reload, and confirm it is still locked.
+6. Uncheck **Conferencing**, then **Add systems from the brief**. Conferencing comes back, because the brief has AV in scope. Acoustics stays off — it has no brief category. The button does not turn systems off.
+7. **Print / PDF** (or print preview). The page shows CMPLX iT, the project, scope, and each in-scope question with status and answer, without the scope checkboxes or status buttons.
+8. **Download DOCX**. The file is named for the project and contains the same scope and answers.
+9. Open **DEMO — Atrium Bar Refresh**. Every system is off and no questions show. Check **Acoustics** and confirm the held-for-discovery note, still with no questions.
+10. At about 390px wide, the scope list stacks above the questions and both stay inside the viewport.
+
+Signed out, `/projects/:id/kickoff` stays on the landing page. An allowlisted editor in live mode uses the same route after `db/006_kickoff.sql` is applied.
 
 ## Verify cable fill
 

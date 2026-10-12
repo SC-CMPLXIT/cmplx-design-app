@@ -154,6 +154,12 @@ export function ProjectDetail() {
         description="Current status on the project. Notes below are the dated trail — they do not replace the pill."
         actions={
           <>
+            <Link
+              to={`/projects/${project.id}/kickoff`}
+              className="inline-flex items-center rounded-sm border border-rule bg-white px-3.5 py-2 text-sm font-medium text-ink hover:bg-paper-2"
+            >
+              Kickoff
+            </Link>
             {brief ? (
               <Link
                 to={`/projects/${project.id}/brief`}
@@ -245,13 +251,21 @@ export function ProjectDetail() {
             <Link className="underline underline-offset-2" to={`/projects/${project.id}/brief`}>
               Edit header, checklist, project narrative, and system narrative
             </Link>
-            . The bill of materials below prints with that brief.
+            . The bill of materials below prints with that brief. The{" "}
+            <Link className="underline underline-offset-2" to={`/projects/${project.id}/kickoff`}>
+              kickoff questionnaire
+            </Link>{" "}
+            is a separate scope checklist.
           </p>
         ) : (
           <p className="mt-2 text-sm leading-6 text-ink-soft">
             No brief yet. One brief per project — header, standard-15 systems
             checklist, three project narratives, and a system narrative per space.
-            Equipment lines can start before the brief.
+            Equipment lines can start before the brief. The{" "}
+            <Link className="underline underline-offset-2" to={`/projects/${project.id}/kickoff`}>
+              kickoff questionnaire
+            </Link>{" "}
+            uses its own system checklist and can start now.
           </p>
         )}
       </section>

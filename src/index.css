@@ -136,6 +136,19 @@ textarea {
     height: auto;
   }
 
+  .kickoff-print {
+    color: black;
+    background: white;
+  }
+
+  .kickoff-qa {
+    break-inside: avoid;
+  }
+
+  .kickoff-answer {
+    white-space: pre-wrap;
+  }
+
   input,
   textarea,
   select {

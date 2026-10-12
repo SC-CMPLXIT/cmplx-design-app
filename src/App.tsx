@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { BriefEditor } from "./components/BriefEditor";
+import { KickoffQuestionnaire } from "./components/KickoffQuestionnaire";
 import { CableFillCalculator } from "./components/CableFillCalculator";
 import { Gate } from "./components/Gate";
 import { ToolsIndex } from "./components/ToolsIndex";
@@ -19,6 +20,7 @@ export default function App() {
           <Route path="/projects/new" element={<ProjectForm />} />
           <Route path="/projects/:projectId" element={<ProjectDetail />} />
           <Route path="/projects/:projectId/brief" element={<BriefEditor />} />
+          <Route path="/projects/:projectId/kickoff" element={<KickoffQuestionnaire />} />
           <Route path="/tools" element={<ToolsIndex />} />
           <Route path="/tools/cable-fill" element={<CableFillCalculator />} />
           <Route path="/tools/ups" element={<UpsCalculator />} />
