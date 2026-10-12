@@ -1,6 +1,17 @@
 import { prepareBomDraft, prepareBomName } from "./bom";
 import { TECHNOLOGY_CATEGORIES } from "./categories";
 import { demoApi } from "./demo-store";
+import {
+  DISCOVERY_ANSWER_LIMIT,
+  DISCOVERY_BUCKET,
+  DISCOVERY_SIGNED_URL_SECONDS,
+  assertDiscoveryFile,
+  discoveryExtension,
+  discoveryStoragePath,
+  prepareDiscrepancyDraft,
+  prepareSpaceDraft,
+} from "./discovery";
+import { getDemoFileUrl, putDemoFile } from "./demo-files";
 import { KICKOFF_ANSWER_LIMIT } from "./systems";
 import { getSupabase, isSupabaseConfigured } from "./supabase";
 import {
@@ -9,6 +20,15 @@ import {
   type BomItemUpdate,
   type BriefDraft,
   type DesignBrief,
+  type DiscoveryAnswer,
+  type DiscoveryAnswerDraft,
+  type DiscoveryAttachment,
+  type DiscoveryAttachmentKind,
+  type DiscoveryBundle,
+  type DiscoveryDiscrepancy,
+  type DiscoveryDiscrepancyDraft,
+  type DiscoverySpace,
+  type DiscoverySpaceDraft,
   type KickoffAnswerDraft,
   type KickoffBundle,
   type KickoffQuestion,
@@ -19,6 +39,7 @@ import {
   type ProjectQuestionAnswer,
   type ProjectSpace,
   type ProjectSystemScope,
+  type QuestionBank,
   type ScopeItem,
   type SpaceBundle,
   type SpaceDraft,
@@ -29,6 +50,7 @@ import {
 } from "./types";
 
 const KICKOFF_SETUP = "Kickoff is not in this database yet. Apply db/006_kickoff.sql.";
+const DISCOVERY_SETUP = "Discovery is not in this database yet. Apply db/007_discovery.sql.";
 
 function requireMessage(error: { message: string } | null, fallback: string) {
   if (error) throw new Error(error.message || fallback);
@@ -535,7 +557,7 @@ export const api = {
 
   async getKickoff(projectId: string): Promise<KickoffBundle> {
     if (!isSupabaseConfigured) return demoApi.getKickoff(projectId);
-    const reference = await loadKickoffReference();
+    const reference = await loadScopeReference("kickoff");
     await ensureProjectSystemScope(
       projectId,
       reference.systems.map((system) => system.key),
@@ -602,6 +624,342 @@ export const api = {
     );
     await touchProject(projectId);
     return saved;
+  },
+
+  async getDiscovery(projectId: string): Promise<DiscoveryBundle> {
+    if (!isSupabaseConfigured) {
+      const bundle = demoApi.getDiscovery(projectId);
+      return {
+        ...bundle,
+        attachments: await attachDemoUrls(bundle.attachments),
+      };
+    }
+    const reference = await loadScopeReference("discovery");
+    await ensureProjectSystemScope(
+      projectId,
+      reference.systems.map((system) => system.key),
+    );
+    const supabase = getSupabase();
+    const [spacesResult, attachmentResult, scopeResult, answerResult, gapResult] = await Promise.all([
+      supabase
+        .from("discovery_spaces")
+        .select("*")
+        .eq("project_id", projectId)
+        .is("deleted_at", null)
+        .order("sort_order", { ascending: true }),
+      supabase
+        .from("discovery_attachments")
+        .select("*")
+        .eq("project_id", projectId)
+        .is("deleted_at", null)
+        .order("sort_order", { ascending: true }),
+      supabase.from("project_system_scope").select("*").eq("project_id", projectId),
+      supabase.from("discovery_answers").select("*").eq("project_id", projectId),
+      supabase
+        .from("discovery_discrepancies")
+        .select("*, discovery_spaces(name, deleted_at)")
+        .eq("project_id", projectId)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: true }),
+    ]);
+    discoveryOrThrow(spacesResult.error, "Could not load discovery spaces.");
+    discoveryOrThrow(attachmentResult.error, "Could not load discovery files.");
+    discoveryOrThrow(scopeResult.error, "Could not load discovery scope.");
+    discoveryOrThrow(answerResult.error, "Could not load discovery answers.");
+    discoveryOrThrow(gapResult.error, "Could not load discrepancies.");
+    const attachments = await signAttachments(
+      ((attachmentResult.data ?? []) as RawAttachment[]).map(asAttachment),
+    );
+    return {
+      spaces: ((spacesResult.data ?? []) as DiscoverySpace[]).map(asDiscoverySpace),
+      attachments,
+      systems: reference.systems,
+      questions: reference.questions,
+      scope: (scopeResult.data ?? []) as ProjectSystemScope[],
+      answers: ((answerResult.data ?? []) as DiscoveryAnswer[]).map(asDiscoveryAnswer),
+      discrepancies: ((gapResult.data ?? []) as RawDiscrepancy[]).map(asDiscrepancy),
+    };
+  },
+
+  async createDiscoverySpace(
+    projectId: string,
+    name: string,
+    groupName: string,
+  ): Promise<DiscoverySpace> {
+    const draft = prepareSpaceDraft({
+      name,
+      group_name: groupName,
+      plan_shows: "",
+      intended_use: "",
+      occupancy: "",
+      notes: "",
+      thumbnail_attachment_id: null,
+    });
+    if (!isSupabaseConfigured) return demoApi.createDiscoverySpace(projectId, draft);
+    const supabase = getSupabase();
+    const { data: existing, error: listError } = await supabase
+      .from("discovery_spaces")
+      .select("sort_order")
+      .eq("project_id", projectId)
+      .is("deleted_at", null);
+    discoveryOrThrow(listError, "Could not add a space.");
+    const sortOrder =
+      ((existing ?? []) as { sort_order: number }[]).reduce(
+        (max, row) => Math.max(max, row.sort_order),
+        0,
+      ) + 1;
+    const { data, error } = await supabase
+      .from("discovery_spaces")
+      .insert({
+        project_id: projectId,
+        name: draft.name,
+        group_name: draft.group_name,
+        sort_order: sortOrder,
+      })
+      .select("*")
+      .single();
+    discoveryOrThrow(error, "Could not add a space.");
+    await touchProject(projectId);
+    return asDiscoverySpace(data as DiscoverySpace);
+  },
+
+  async updateDiscoverySpace(
+    projectId: string,
+    id: string,
+    draft: DiscoverySpaceDraft,
+  ): Promise<DiscoverySpace> {
+    const prepared = prepareSpaceDraft(draft);
+    if (!isSupabaseConfigured) return demoApi.updateDiscoverySpace(projectId, id, prepared);
+    const { data, error } = await getSupabase()
+      .from("discovery_spaces")
+      .update(prepared)
+      .eq("id", id)
+      .eq("project_id", projectId)
+      .is("deleted_at", null)
+      .select("*")
+      .maybeSingle();
+    discoveryOrThrow(error, "Could not save space.");
+    if (!data) throw new Error("Space not found.");
+    await touchProject(projectId);
+    return asDiscoverySpace(data as DiscoverySpace);
+  },
+
+  async reorderDiscoverySpaces(projectId: string, orderedIds: string[]): Promise<void> {
+    if (!isSupabaseConfigured) {
+      demoApi.reorderDiscoverySpaces(projectId, orderedIds);
+      return;
+    }
+    const supabase = getSupabase();
+    await Promise.all(
+      orderedIds.map(async (id, index) => {
+        const { error } = await supabase
+          .from("discovery_spaces")
+          .update({ sort_order: index + 1 })
+          .eq("id", id)
+          .eq("project_id", projectId)
+          .is("deleted_at", null);
+        discoveryOrThrow(error, "Could not reorder spaces.");
+      }),
+    );
+    await touchProject(projectId);
+  },
+
+  async archiveDiscoverySpace(projectId: string, id: string): Promise<void> {
+    if (!isSupabaseConfigured) {
+      demoApi.archiveDiscoverySpace(projectId, id);
+      return;
+    }
+    const now = new Date().toISOString();
+    const { data, error } = await getSupabase()
+      .from("discovery_spaces")
+      .update({ deleted_at: now })
+      .eq("id", id)
+      .eq("project_id", projectId)
+      .is("deleted_at", null)
+      .select("id")
+      .maybeSingle();
+    discoveryOrThrow(error, "Could not remove space.");
+    if (!data) throw new Error("Space not found.");
+    await touchProject(projectId);
+  },
+
+  async saveDiscoveryAnswer(
+    projectId: string,
+    draft: DiscoveryAnswerDraft,
+  ): Promise<DiscoveryAnswer> {
+    assertDiscoveryAnswer(draft);
+    if (!isSupabaseConfigured) return demoApi.saveDiscoveryAnswer(projectId, draft);
+    const { data, error } = await getSupabase()
+      .from("discovery_answers")
+      .upsert(
+        {
+          project_id: projectId,
+          space_id: draft.space_id,
+          question_key: draft.question_key,
+          body: draft.body,
+          status: draft.status,
+        },
+        { onConflict: "space_id,question_key" },
+      )
+      .select("*")
+      .single();
+    discoveryOrThrow(error, "Could not save answer.");
+    await touchProject(projectId);
+    return asDiscoveryAnswer(data as DiscoveryAnswer);
+  },
+
+  async uploadDiscoveryFile(
+    projectId: string,
+    kind: DiscoveryAttachmentKind,
+    file: File,
+  ): Promise<DiscoveryAttachment> {
+    const prepared = assertDiscoveryFile(kind, file);
+    const extension = discoveryExtension(prepared.contentType);
+    if (!extension) throw new Error("That file type is not supported.");
+    if (!isSupabaseConfigured) {
+      const row = demoApi.createDiscoveryAttachment(projectId, {
+        kind,
+        file_name: prepared.fileName,
+        content_type: prepared.contentType,
+        byte_size: file.size,
+        extension,
+      });
+      try {
+        await putDemoFile(row.id, file);
+      } catch (error) {
+        demoApi.archiveDiscoveryAttachment(projectId, row.id);
+        throw error instanceof Error ? error : new Error("Could not store the file.");
+      }
+      return { ...row, signed_url: await getDemoFileUrl(row.id) };
+    }
+    const id = crypto.randomUUID();
+    const storagePath = discoveryStoragePath(projectId, id, extension);
+    const supabase = getSupabase();
+    const { data: existing, error: listError } = await supabase
+      .from("discovery_attachments")
+      .select("sort_order")
+      .eq("project_id", projectId)
+      .is("deleted_at", null);
+    discoveryOrThrow(listError, "Could not upload the file.");
+    const sortOrder =
+      ((existing ?? []) as { sort_order: number }[]).reduce(
+        (max, row) => Math.max(max, row.sort_order),
+        0,
+      ) + 1;
+    const { error: insertError } = await supabase.from("discovery_attachments").insert({
+      id,
+      project_id: projectId,
+      kind,
+      storage_path: storagePath,
+      file_name: prepared.fileName,
+      content_type: prepared.contentType,
+      byte_size: file.size,
+      sort_order: sortOrder,
+    });
+    discoveryOrThrow(insertError, "Could not upload the file.");
+    const { error: uploadError } = await supabase.storage
+      .from(DISCOVERY_BUCKET)
+      .upload(storagePath, file, { contentType: prepared.contentType, upsert: false });
+    if (uploadError) {
+      await supabase
+        .from("discovery_attachments")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", id);
+      discoveryOrThrow(uploadError, "Could not upload the file.");
+    }
+    await touchProject(projectId);
+    const signed = await signAttachments([
+      {
+        id,
+        project_id: projectId,
+        kind,
+        storage_path: storagePath,
+        file_name: prepared.fileName,
+        content_type: prepared.contentType,
+        byte_size: file.size,
+        sort_order: sortOrder,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        deleted_at: null,
+        signed_url: null,
+      },
+    ]);
+    return signed[0];
+  },
+
+  async archiveDiscoveryAttachment(projectId: string, id: string): Promise<void> {
+    if (!isSupabaseConfigured) {
+      demoApi.archiveDiscoveryAttachment(projectId, id);
+      return;
+    }
+    const now = new Date().toISOString();
+    const { data, error } = await getSupabase()
+      .from("discovery_attachments")
+      .update({ deleted_at: now })
+      .eq("id", id)
+      .eq("project_id", projectId)
+      .is("deleted_at", null)
+      .select("id")
+      .maybeSingle();
+    discoveryOrThrow(error, "Could not remove the file.");
+    if (!data) throw new Error("File not found.");
+    await touchProject(projectId);
+  },
+
+  async createDiscoveryDiscrepancy(
+    projectId: string,
+    draft: DiscoveryDiscrepancyDraft,
+  ): Promise<DiscoveryDiscrepancy> {
+    const prepared = prepareDiscrepancyDraft(draft);
+    if (!isSupabaseConfigured) return demoApi.createDiscoveryDiscrepancy(projectId, prepared);
+    const { data, error } = await getSupabase()
+      .from("discovery_discrepancies")
+      .insert({ project_id: projectId, ...prepared })
+      .select("*, discovery_spaces(name, deleted_at)")
+      .single();
+    discoveryOrThrow(error, "Could not add a discrepancy.");
+    await touchProject(projectId);
+    return asDiscrepancy(data as RawDiscrepancy);
+  },
+
+  async updateDiscoveryDiscrepancy(
+    projectId: string,
+    id: string,
+    draft: DiscoveryDiscrepancyDraft,
+  ): Promise<DiscoveryDiscrepancy> {
+    const prepared = prepareDiscrepancyDraft(draft);
+    if (!isSupabaseConfigured) return demoApi.updateDiscoveryDiscrepancy(projectId, id, prepared);
+    const { data, error } = await getSupabase()
+      .from("discovery_discrepancies")
+      .update(prepared)
+      .eq("id", id)
+      .eq("project_id", projectId)
+      .is("deleted_at", null)
+      .select("*, discovery_spaces(name, deleted_at)")
+      .maybeSingle();
+    discoveryOrThrow(error, "Could not save discrepancy.");
+    if (!data) throw new Error("Discrepancy not found.");
+    await touchProject(projectId);
+    return asDiscrepancy(data as RawDiscrepancy);
+  },
+
+  async archiveDiscoveryDiscrepancy(projectId: string, id: string): Promise<void> {
+    if (!isSupabaseConfigured) {
+      demoApi.archiveDiscoveryDiscrepancy(projectId, id);
+      return;
+    }
+    const now = new Date().toISOString();
+    const { data, error } = await getSupabase()
+      .from("discovery_discrepancies")
+      .update({ deleted_at: now })
+      .eq("id", id)
+      .eq("project_id", projectId)
+      .is("deleted_at", null)
+      .select("id")
+      .maybeSingle();
+    discoveryOrThrow(error, "Could not remove discrepancy.");
+    if (!data) throw new Error("Discrepancy not found.");
+    await touchProject(projectId);
   },
 };
 
@@ -692,29 +1050,30 @@ type RawQuestion = {
   sort_order: number;
 };
 
-async function loadKickoffReference(): Promise<
-  Pick<KickoffBundle, "systems" | "questions">
-> {
+async function loadScopeReference(
+  bank: QuestionBank,
+): Promise<Pick<KickoffBundle, "systems" | "questions">> {
   const supabase = getSupabase();
+  const setup = bank === "discovery" ? DISCOVERY_SETUP : KICKOFF_SETUP;
   const [systemsResult, questionsResult, linksResult, categoriesResult] = await Promise.all([
     supabase.from("technology_systems").select("*").order("sort_order", { ascending: true }),
     supabase
       .from("scope_questions")
       .select("*")
-      .eq("bank", "kickoff")
+      .eq("bank", bank)
       .order("sort_order", { ascending: true }),
     supabase.from("scope_question_systems").select("question_key, system_key"),
     supabase.from("system_category_links").select("system_key, category_key"),
   ]);
-  kickoffOrThrow(systemsResult.error, KICKOFF_SETUP);
-  kickoffOrThrow(questionsResult.error, KICKOFF_SETUP);
-  kickoffOrThrow(linksResult.error, KICKOFF_SETUP);
-  kickoffOrThrow(categoriesResult.error, KICKOFF_SETUP);
+  kickoffOrThrow(systemsResult.error, setup);
+  kickoffOrThrow(questionsResult.error, setup);
+  kickoffOrThrow(linksResult.error, setup);
+  kickoffOrThrow(categoriesResult.error, setup);
 
   const systemsRaw = (systemsResult.data ?? []) as RawSystem[];
   const questionsRaw = (questionsResult.data ?? []) as RawQuestion[];
   if (systemsRaw.length === 0 || questionsRaw.length === 0) {
-    throw new Error(KICKOFF_SETUP);
+    throw new Error(setup);
   }
 
   const systemOrder = new Map(systemsRaw.map((system) => [system.key, system.sort_order]));
@@ -787,6 +1146,108 @@ async function touchProject(projectId: string) {
     .eq("id", projectId)
     .is("deleted_at", null);
   requireMessage(error, "Could not update project.");
+}
+
+function discoveryOrThrow(error: { message: string } | null, fallback: string) {
+  if (!error) return;
+  if (
+    /does not exist|schema cache|discovery_spaces|discovery_attachments|discovery_answers|discovery_discrepancies|Bucket not found|bucket not found/i.test(
+      error.message,
+    )
+  ) {
+    throw new Error(DISCOVERY_SETUP);
+  }
+  throw new Error(error.message || fallback);
+}
+
+function assertDiscoveryAnswer(draft: DiscoveryAnswerDraft) {
+  if (!QUESTION_ANSWER_STATUSES.includes(draft.status)) {
+    throw new Error("Answer status must be open, answered, or locked.");
+  }
+  if (draft.body.length > DISCOVERY_ANSWER_LIMIT) throw new Error("Answer is too long.");
+}
+
+function asDiscoverySpace(row: DiscoverySpace): DiscoverySpace {
+  return {
+    ...row,
+    group_name: row.group_name ?? "",
+    plan_shows: row.plan_shows ?? "",
+    intended_use: row.intended_use ?? "",
+    occupancy: row.occupancy ?? "",
+    notes: row.notes ?? "",
+    thumbnail_attachment_id: row.thumbnail_attachment_id ?? null,
+    deleted_at: row.deleted_at ?? null,
+  };
+}
+
+type RawAttachment = Omit<DiscoveryAttachment, "byte_size" | "signed_url"> & {
+  byte_size: number | string;
+};
+
+function asAttachment(row: RawAttachment): DiscoveryAttachment {
+  return {
+    ...row,
+    byte_size: Number(row.byte_size),
+    deleted_at: row.deleted_at ?? null,
+    signed_url: null,
+  };
+}
+
+function asDiscoveryAnswer(row: DiscoveryAnswer): DiscoveryAnswer {
+  return {
+    ...row,
+    body: row.body ?? "",
+    status: QUESTION_ANSWER_STATUSES.includes(row.status) ? row.status : "open",
+  };
+}
+
+type RawDiscrepancy = Omit<DiscoveryDiscrepancy, "space_name" | "space_archived"> & {
+  discovery_spaces?: { name: string; deleted_at: string | null } | null;
+};
+
+function asDiscrepancy(row: RawDiscrepancy): DiscoveryDiscrepancy {
+  const space = row.discovery_spaces ?? null;
+  return {
+    id: row.id,
+    project_id: row.project_id,
+    space_id: row.space_id ?? null,
+    plan_shows: row.plan_shows ?? "",
+    notes_say: row.notes_say ?? "",
+    severity: row.severity,
+    status: row.status,
+    resolution_note: row.resolution_note ?? "",
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    deleted_at: row.deleted_at ?? null,
+    space_name: space?.name ?? null,
+    space_archived: Boolean(space?.deleted_at),
+  };
+}
+
+async function signAttachments(rows: DiscoveryAttachment[]): Promise<DiscoveryAttachment[]> {
+  if (rows.length === 0) return [];
+  const { data, error } = await getSupabase()
+    .storage
+    .from(DISCOVERY_BUCKET)
+    .createSignedUrls(
+      rows.map((row) => row.storage_path),
+      DISCOVERY_SIGNED_URL_SECONDS,
+    );
+  discoveryOrThrow(error, "Could not open discovery files.");
+  const urls = new Map<string, string>();
+  for (const item of data ?? []) {
+    if (item.path && item.signedUrl && !item.error) urls.set(item.path, item.signedUrl);
+  }
+  return rows.map((row) => ({ ...row, signed_url: urls.get(row.storage_path) ?? null }));
+}
+
+async function attachDemoUrls(rows: DiscoveryAttachment[]): Promise<DiscoveryAttachment[]> {
+  return Promise.all(
+    rows.map(async (row) => ({
+      ...row,
+      signed_url: await getDemoFileUrl(row.id).catch(() => null),
+    })),
+  );
 }
 
 export type { ScopeItem };

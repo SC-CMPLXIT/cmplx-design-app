@@ -1,6 +1,18 @@
 import { prepareBomDraft, prepareBomName } from "./bom";
 import { TECHNOLOGY_CATEGORIES } from "./categories";
-import { KICKOFF_ANSWER_LIMIT, KICKOFF_QUESTIONS, TECHNOLOGY_SYSTEMS } from "./systems";
+import { clearDemoFiles } from "./demo-files";
+import {
+  DISCOVERY_ANSWER_LIMIT,
+  discoveryStoragePath,
+  prepareDiscrepancyDraft,
+  prepareSpaceDraft,
+} from "./discovery";
+import {
+  DISCOVERY_QUESTIONS,
+  KICKOFF_ANSWER_LIMIT,
+  KICKOFF_QUESTIONS,
+  TECHNOLOGY_SYSTEMS,
+} from "./systems";
 import {
   QUESTION_ANSWER_STATUSES,
   type AuthUser,
@@ -8,6 +20,15 @@ import {
   type BomItemUpdate,
   type BriefDraft,
   type DesignBrief,
+  type DiscoveryAnswer,
+  type DiscoveryAnswerDraft,
+  type DiscoveryAttachment,
+  type DiscoveryAttachmentKind,
+  type DiscoveryBundle,
+  type DiscoveryDiscrepancy,
+  type DiscoveryDiscrepancyDraft,
+  type DiscoverySpace,
+  type DiscoverySpaceDraft,
   type KickoffAnswerDraft,
   type KickoffBundle,
   type KickoffQuestion,
@@ -38,6 +59,10 @@ type DemoState = {
   bomItems: BomItem[];
   systemScope: ProjectSystemScope[];
   questionAnswers: ProjectQuestionAnswer[];
+  discoverySpaces: DiscoverySpace[];
+  discoveryAttachments: DiscoveryAttachment[];
+  discoveryAnswers: DiscoveryAnswer[];
+  discoveryDiscrepancies: DiscoveryDiscrepancy[];
 };
 
 const CLUB_ID = "11111111-1111-4111-8111-111111111111";
@@ -522,6 +547,203 @@ function questionsForDemo(): KickoffQuestion[] {
   }));
 }
 
+function discoveryQuestionsForDemo(): KickoffQuestion[] {
+  return DISCOVERY_QUESTIONS.map((question) => ({
+    ...question,
+    system_keys: [...question.system_keys],
+  }));
+}
+
+function seedDiscoverySpaces(): DiscoverySpace[] {
+  const rows: Array<Omit<DiscoverySpace, "created_at" | "updated_at" | "deleted_at"> & { stamp: string }> = [
+    {
+      id: "e1111111-1111-4111-8111-111111111101",
+      project_id: CLUB_ID,
+      name: "Lobby",
+      group_name: "Public floor",
+      plan_shows: "DEMO — Members door and a host desk. No display or data symbol on the plan.",
+      intended_use: "DEMO — Arrival and host.",
+      occupancy: "DEMO — A short queue at the door.",
+      notes: "DEMO — Confirm whether the feature wall stays a static graphic.",
+      thumbnail_attachment_id: null,
+      sort_order: 1,
+      stamp: DEMO_STAMP,
+    },
+    {
+      id: "e1111111-1111-4111-8111-111111111102",
+      project_id: CLUB_ID,
+      name: "Dock-side room",
+      group_name: "Public floor",
+      plan_shows: "DEMO — One image on the long wall, with power. No floor box shown.",
+      intended_use: "DEMO — Meetings and small events.",
+      occupancy: "DEMO — About a dozen seats.",
+      notes: "DEMO — Speech and a single image. Nothing else competes with the room.",
+      thumbnail_attachment_id: null,
+      sort_order: 2,
+      stamp: DEMO_STAMP,
+    },
+    {
+      id: "e1111111-1111-4111-8111-111111111103",
+      project_id: CLUB_ID,
+      name: "Back of house",
+      group_name: "Support",
+      plan_shows: "DEMO — Service corridor room marked for IT. Power note only.",
+      intended_use: "DEMO — Racks and service. Not a guest room.",
+      occupancy: "DEMO — Staff only.",
+      notes: "",
+      thumbnail_attachment_id: null,
+      sort_order: 3,
+      stamp: DEMO_STAMP,
+    },
+    {
+      id: "e2222222-2222-4222-8222-222222222201",
+      project_id: INN_ID,
+      name: "Guest rooms",
+      group_name: "Guest floors",
+      plan_shows: "DEMO — A display in each key. No new data symbols on the plan.",
+      intended_use: "DEMO — In-room entertainment and a lock.",
+      occupancy: "DEMO — One key per room.",
+      notes: "DEMO — Confirm whether the existing headend stays.",
+      thumbnail_attachment_id: null,
+      sort_order: 1,
+      stamp: "2026-07-18T11:15:00.000Z",
+    },
+    {
+      id: "e2222222-2222-4222-8222-222222222202",
+      project_id: INN_ID,
+      name: "Circulation",
+      group_name: "Guest floors",
+      plan_shows: "DEMO — Corridors and stairs. No displays drawn.",
+      intended_use: "DEMO — Guest movement, with staff wireless separate from the guest network.",
+      occupancy: "DEMO — Transient.",
+      notes: "",
+      thumbnail_attachment_id: null,
+      sort_order: 2,
+      stamp: "2026-07-18T11:15:00.000Z",
+    },
+  ];
+  return rows.map(({ stamp, ...row }) => ({
+    ...row,
+    created_at: stamp,
+    updated_at: stamp,
+    deleted_at: null,
+  }));
+}
+
+function seedDiscoveryAnswers(): DiscoveryAnswer[] {
+  const rows: Array<Omit<DiscoveryAnswer, "created_at" | "updated_at"> & { stamp: string }> = [
+    {
+      id: "e3111111-1111-4111-8111-111111111101",
+      project_id: CLUB_ID,
+      space_id: "e1111111-1111-4111-8111-111111111101",
+      question_key: "display_purpose",
+      body: "DEMO — No image. The feature wall stays a static graphic.",
+      status: "answered",
+      stamp: DEMO_STAMP,
+    },
+    {
+      id: "e3111111-1111-4111-8111-111111111102",
+      project_id: CLUB_ID,
+      space_id: "e1111111-1111-4111-8111-111111111102",
+      question_key: "display_location",
+      body: "DEMO — Long wall, one image. Size follows the furniture layout.",
+      status: "locked",
+      stamp: DEMO_STAMP,
+    },
+    {
+      id: "e3111111-1111-4111-8111-111111111103",
+      project_id: CLUB_ID,
+      space_id: "e1111111-1111-4111-8111-111111111102",
+      question_key: "conferencing_mode",
+      body: "DEMO — Still deciding between a room system and a laptop on the table.",
+      status: "open",
+      stamp: DEMO_STAMP,
+    },
+    {
+      id: "e3222222-2222-4222-8222-222222222201",
+      project_id: INN_ID,
+      space_id: "e2222222-2222-4222-8222-222222222201",
+      question_key: "display_purpose",
+      body: "DEMO — One display per key, for the in-room platform. No signage.",
+      status: "answered",
+      stamp: "2026-07-18T11:15:00.000Z",
+    },
+  ];
+  return rows.map(({ stamp, ...row }) => ({
+    ...row,
+    created_at: stamp,
+    updated_at: stamp,
+  }));
+}
+
+function seedDiscoveryDiscrepancies(): DiscoveryDiscrepancy[] {
+  const rows: Array<
+    Omit<DiscoveryDiscrepancy, "created_at" | "updated_at" | "deleted_at"> & { stamp: string }
+  > = [
+    {
+      id: "e4111111-1111-4111-8111-111111111101",
+      project_id: CLUB_ID,
+      space_id: "e1111111-1111-4111-8111-111111111102",
+      plan_shows: "DEMO — One display on the long wall, with power. No floor box.",
+      notes_say:
+        "DEMO — The events note asks for speech and a single image, which matches the plan. Outlet count is still open.",
+      severity: "medium",
+      status: "open",
+      resolution_note: "",
+      space_name: "Dock-side room",
+      space_archived: false,
+      stamp: DEMO_STAMP,
+    },
+    {
+      id: "e4111111-1111-4111-8111-111111111102",
+      project_id: CLUB_ID,
+      space_id: null,
+      plan_shows: "DEMO — Data is drawn only at the dock-side display.",
+      notes_say:
+        "DEMO — The kickoff answer says two cables at each data outlet, including access points, but those outlets are not on the plan yet.",
+      severity: "high",
+      status: "open",
+      resolution_note: "",
+      space_name: null,
+      space_archived: false,
+      stamp: DEMO_STAMP,
+    },
+    {
+      id: "e4111111-1111-4111-8111-111111111103",
+      project_id: CLUB_ID,
+      space_id: "e1111111-1111-4111-8111-111111111101",
+      plan_shows: "DEMO — No display on the lobby plan.",
+      notes_say: "DEMO — Arrival should stay a static graphic, with no image.",
+      severity: "low",
+      status: "resolved",
+      resolution_note: "DEMO — Agreed on the call. No display in this space.",
+      space_name: "Lobby",
+      space_archived: false,
+      stamp: DEMO_STAMP,
+    },
+  ];
+  return rows.map(({ stamp, ...row }) => ({
+    ...row,
+    created_at: stamp,
+    updated_at: stamp,
+    deleted_at: null,
+  }));
+}
+
+function decorateDiscrepancy(
+  state: DemoState,
+  row: DiscoveryDiscrepancy,
+): DiscoveryDiscrepancy {
+  const space = row.space_id
+    ? state.discoverySpaces.find((item) => item.id === row.space_id)
+    : undefined;
+  return {
+    ...row,
+    space_name: space?.name ?? null,
+    space_archived: Boolean(space?.deleted_at),
+  };
+}
+
 function mergeKickoff(state: DemoState): boolean {
   let changed = false;
   if (!Array.isArray(state.systemScope)) {
@@ -691,7 +913,39 @@ function seedState(): DemoState {
       scopeRowsFor(projectId, DEMO_STAMP),
     ),
     questionAnswers: seedQuestionAnswers(),
+    discoverySpaces: seedDiscoverySpaces(),
+    discoveryAttachments: [],
+    discoveryAnswers: seedDiscoveryAnswers(),
+    discoveryDiscrepancies: seedDiscoveryDiscrepancies(),
   };
+}
+
+function mergeDiscovery(state: DemoState): boolean {
+  let changed = false;
+  const projectIds = new Set(state.projects.map((project) => project.id));
+  if (!Array.isArray(state.discoverySpaces)) {
+    state.discoverySpaces = seedDiscoverySpaces().filter((row) => projectIds.has(row.project_id));
+    changed = true;
+  }
+  if (!Array.isArray(state.discoveryAttachments)) {
+    state.discoveryAttachments = [];
+    changed = true;
+  }
+  if (!Array.isArray(state.discoveryAnswers)) {
+    const liveSpaces = new Set(state.discoverySpaces.map((row) => row.id));
+    state.discoveryAnswers = seedDiscoveryAnswers().filter(
+      (row) => projectIds.has(row.project_id) && liveSpaces.has(row.space_id),
+    );
+    changed = true;
+  }
+  if (!Array.isArray(state.discoveryDiscrepancies)) {
+    const liveSpaces = new Set(state.discoverySpaces.map((row) => row.id));
+    state.discoveryDiscrepancies = seedDiscoveryDiscrepancies().filter(
+      (row) => projectIds.has(row.project_id) && (row.space_id == null || liveSpaces.has(row.space_id)),
+    );
+    changed = true;
+  }
+  return changed;
 }
 
 function load(): DemoState {
@@ -730,6 +984,7 @@ function load(): DemoState {
       upgraded = true;
     }
     if (mergeKickoff(parsed)) upgraded = true;
+    if (mergeDiscovery(parsed)) upgraded = true;
     if (upgraded) persist(parsed);
     return parsed;
   } catch {
@@ -765,6 +1020,7 @@ export const demoAuth = {
   },
   reset() {
     localStorage.removeItem(STORAGE_KEY);
+    clearDemoFiles();
   },
 };
 
@@ -826,6 +1082,24 @@ export const demoApi = {
         }
       }
       for (const item of state.bomItems) {
+        if (item.project_id === id && !item.deleted_at) {
+          item.deleted_at = project.deleted_at;
+          item.updated_at = project.deleted_at;
+        }
+      }
+      for (const item of state.discoverySpaces) {
+        if (item.project_id === id && !item.deleted_at) {
+          item.deleted_at = project.deleted_at;
+          item.updated_at = project.deleted_at;
+        }
+      }
+      for (const item of state.discoveryAttachments) {
+        if (item.project_id === id && !item.deleted_at) {
+          item.deleted_at = project.deleted_at;
+          item.updated_at = project.deleted_at;
+        }
+      }
+      for (const item of state.discoveryDiscrepancies) {
         if (item.project_id === id && !item.deleted_at) {
           item.deleted_at = project.deleted_at;
           item.updated_at = project.deleted_at;
@@ -1225,4 +1499,285 @@ export const demoApi = {
       return saved;
     });
   },
+
+  getDiscovery(projectId: string): DiscoveryBundle {
+    const state = load();
+    const project = state.projects.find((row) => row.id === projectId && !row.deleted_at);
+    if (!project) throw new Error("Project not found.");
+    return {
+      spaces: state.discoverySpaces
+        .filter((row) => row.project_id === projectId && !row.deleted_at)
+        .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name))
+        .map((row) => ({ ...row })),
+      attachments: state.discoveryAttachments
+        .filter((row) => row.project_id === projectId && !row.deleted_at)
+        .sort((a, b) => a.sort_order - b.sort_order || a.file_name.localeCompare(b.file_name))
+        .map((row) => ({ ...row, signed_url: null })),
+      systems: systemsForDemo(),
+      questions: discoveryQuestionsForDemo(),
+      scope: state.systemScope
+        .filter((row) => row.project_id === projectId)
+        .map((row) => ({ ...row })),
+      answers: state.discoveryAnswers
+        .filter((row) => row.project_id === projectId)
+        .map((row) => ({ ...row })),
+      discrepancies: state.discoveryDiscrepancies
+        .filter((row) => row.project_id === projectId && !row.deleted_at)
+        .sort((a, b) => a.created_at.localeCompare(b.created_at))
+        .map((row) => decorateDiscrepancy(state, row)),
+    };
+  },
+
+  createDiscoverySpace(projectId: string, draft: DiscoverySpaceDraft): DiscoverySpace {
+    const prepared = prepareSpaceDraft(draft);
+    const now = isoNow();
+    return mutate((state) => {
+      const project = state.projects.find((row) => row.id === projectId && !row.deleted_at);
+      if (!project) throw new Error("Project not found.");
+      const sortOrder =
+        state.discoverySpaces
+          .filter((row) => row.project_id === projectId && !row.deleted_at)
+          .reduce((max, row) => Math.max(max, row.sort_order), 0) + 1;
+      const created: DiscoverySpace = {
+        id: crypto.randomUUID(),
+        project_id: projectId,
+        ...prepared,
+        sort_order: sortOrder,
+        created_at: now,
+        updated_at: now,
+        deleted_at: null,
+      };
+      state.discoverySpaces.push(created);
+      project.updated_at = now;
+      return { ...created };
+    });
+  },
+
+  updateDiscoverySpace(
+    projectId: string,
+    id: string,
+    draft: DiscoverySpaceDraft,
+  ): DiscoverySpace {
+    const prepared = prepareSpaceDraft(draft);
+    const now = isoNow();
+    return mutate((state) => {
+      const project = state.projects.find((row) => row.id === projectId && !row.deleted_at);
+      if (!project) throw new Error("Project not found.");
+      const row = state.discoverySpaces.find(
+        (item) => item.id === id && item.project_id === projectId && !item.deleted_at,
+      );
+      if (!row) throw new Error("Space not found.");
+      if (prepared.thumbnail_attachment_id) {
+        const file = state.discoveryAttachments.find(
+          (item) =>
+            item.id === prepared.thumbnail_attachment_id &&
+            item.project_id === projectId &&
+            !item.deleted_at,
+        );
+        if (!file || file.kind !== "rendering") {
+          throw new Error("Thumbnail must be a rendering uploaded on this project.");
+        }
+      }
+      Object.assign(row, prepared, { updated_at: now });
+      project.updated_at = now;
+      return { ...row };
+    });
+  },
+
+  reorderDiscoverySpaces(projectId: string, orderedIds: string[]) {
+    mutate((state) => {
+      const now = isoNow();
+      orderedIds.forEach((id, index) => {
+        const row = state.discoverySpaces.find(
+          (item) => item.id === id && item.project_id === projectId && !item.deleted_at,
+        );
+        if (!row) throw new Error("Space not found.");
+        row.sort_order = index + 1;
+        row.updated_at = now;
+      });
+      const project = state.projects.find((item) => item.id === projectId && !item.deleted_at);
+      if (project) project.updated_at = now;
+    });
+  },
+
+  archiveDiscoverySpace(projectId: string, id: string) {
+    mutate((state) => {
+      const row = state.discoverySpaces.find(
+        (item) => item.id === id && item.project_id === projectId && !item.deleted_at,
+      );
+      if (!row) throw new Error("Space not found.");
+      row.deleted_at = isoNow();
+      row.updated_at = row.deleted_at;
+      const project = state.projects.find((item) => item.id === projectId && !item.deleted_at);
+      if (project) project.updated_at = row.deleted_at;
+    });
+  },
+
+  saveDiscoveryAnswer(projectId: string, draft: DiscoveryAnswerDraft): DiscoveryAnswer {
+    if (!QUESTION_ANSWER_STATUSES.includes(draft.status)) {
+      throw new Error("Answer status must be open, answered, or locked.");
+    }
+    if (draft.body.length > DISCOVERY_ANSWER_LIMIT) throw new Error("Answer is too long.");
+    if (!DISCOVERY_QUESTIONS.some((question) => question.key === draft.question_key)) {
+      throw new Error("Question not found.");
+    }
+    const now = isoNow();
+    return mutate((state) => {
+      const project = state.projects.find((row) => row.id === projectId && !row.deleted_at);
+      if (!project) throw new Error("Project not found.");
+      const space = state.discoverySpaces.find(
+        (row) => row.id === draft.space_id && row.project_id === projectId && !row.deleted_at,
+      );
+      if (!space) throw new Error("Space not found.");
+      const existing = state.discoveryAnswers.find(
+        (row) => row.space_id === draft.space_id && row.question_key === draft.question_key,
+      );
+      if (existing) {
+        existing.body = draft.body;
+        existing.status = draft.status;
+        existing.updated_at = now;
+        project.updated_at = now;
+        return { ...existing };
+      }
+      const created: DiscoveryAnswer = {
+        id: crypto.randomUUID(),
+        project_id: projectId,
+        space_id: draft.space_id,
+        question_key: draft.question_key,
+        body: draft.body,
+        status: draft.status,
+        created_at: now,
+        updated_at: now,
+      };
+      state.discoveryAnswers.push(created);
+      project.updated_at = now;
+      return { ...created };
+    });
+  },
+
+  createDiscoveryAttachment(
+    projectId: string,
+    input: {
+      kind: DiscoveryAttachmentKind;
+      file_name: string;
+      content_type: string;
+      byte_size: number;
+      extension: string;
+    },
+  ): DiscoveryAttachment {
+    const now = isoNow();
+    return mutate((state) => {
+      const project = state.projects.find((row) => row.id === projectId && !row.deleted_at);
+      if (!project) throw new Error("Project not found.");
+      const id = crypto.randomUUID();
+      const sortOrder =
+        state.discoveryAttachments
+          .filter((row) => row.project_id === projectId && !row.deleted_at)
+          .reduce((max, row) => Math.max(max, row.sort_order), 0) + 1;
+      const created: DiscoveryAttachment = {
+        id,
+        project_id: projectId,
+        kind: input.kind,
+        storage_path: discoveryStoragePath(projectId, id, input.extension),
+        file_name: input.file_name,
+        content_type: input.content_type,
+        byte_size: input.byte_size,
+        sort_order: sortOrder,
+        created_at: now,
+        updated_at: now,
+        deleted_at: null,
+        signed_url: null,
+      };
+      state.discoveryAttachments.push(created);
+      project.updated_at = now;
+      return { ...created };
+    });
+  },
+
+  archiveDiscoveryAttachment(projectId: string, id: string) {
+    mutate((state) => {
+      const row = state.discoveryAttachments.find(
+        (item) => item.id === id && item.project_id === projectId && !item.deleted_at,
+      );
+      if (!row) throw new Error("File not found.");
+      row.deleted_at = isoNow();
+      row.updated_at = row.deleted_at;
+      for (const space of state.discoverySpaces) {
+        if (space.thumbnail_attachment_id === id) {
+          space.thumbnail_attachment_id = null;
+          space.updated_at = row.deleted_at;
+        }
+      }
+      const project = state.projects.find((item) => item.id === projectId && !item.deleted_at);
+      if (project) project.updated_at = row.deleted_at;
+    });
+  },
+
+  createDiscoveryDiscrepancy(
+    projectId: string,
+    draft: DiscoveryDiscrepancyDraft,
+  ): DiscoveryDiscrepancy {
+    const prepared = prepareDiscrepancyDraft(draft);
+    const now = isoNow();
+    return mutate((state) => {
+      const project = state.projects.find((row) => row.id === projectId && !row.deleted_at);
+      if (!project) throw new Error("Project not found.");
+      assertDiscrepancySpace(state, projectId, prepared.space_id);
+      const created: DiscoveryDiscrepancy = {
+        id: crypto.randomUUID(),
+        project_id: projectId,
+        ...prepared,
+        created_at: now,
+        updated_at: now,
+        deleted_at: null,
+        space_name: null,
+        space_archived: false,
+      };
+      state.discoveryDiscrepancies.push(created);
+      project.updated_at = now;
+      return decorateDiscrepancy(state, created);
+    });
+  },
+
+  updateDiscoveryDiscrepancy(
+    projectId: string,
+    id: string,
+    draft: DiscoveryDiscrepancyDraft,
+  ): DiscoveryDiscrepancy {
+    const prepared = prepareDiscrepancyDraft(draft);
+    const now = isoNow();
+    return mutate((state) => {
+      const project = state.projects.find((row) => row.id === projectId && !row.deleted_at);
+      if (!project) throw new Error("Project not found.");
+      const row = state.discoveryDiscrepancies.find(
+        (item) => item.id === id && item.project_id === projectId && !item.deleted_at,
+      );
+      if (!row) throw new Error("Discrepancy not found.");
+      assertDiscrepancySpace(state, projectId, prepared.space_id);
+      Object.assign(row, prepared, { updated_at: now });
+      project.updated_at = now;
+      return decorateDiscrepancy(state, row);
+    });
+  },
+
+  archiveDiscoveryDiscrepancy(projectId: string, id: string) {
+    mutate((state) => {
+      const row = state.discoveryDiscrepancies.find(
+        (item) => item.id === id && item.project_id === projectId && !item.deleted_at,
+      );
+      if (!row) throw new Error("Discrepancy not found.");
+      row.deleted_at = isoNow();
+      row.updated_at = row.deleted_at;
+      const project = state.projects.find((item) => item.id === projectId && !item.deleted_at);
+      if (project) project.updated_at = row.deleted_at;
+    });
+  },
 };
+
+function assertDiscrepancySpace(state: DemoState, projectId: string, spaceId: string | null) {
+  if (!spaceId) return;
+  const space = state.discoverySpaces.find(
+    (row) => row.id === spaceId && row.project_id === projectId,
+  );
+  if (!space) throw new Error("Discrepancy space is not on this project.");
+}

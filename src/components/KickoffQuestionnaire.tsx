@@ -481,8 +481,12 @@ export function KickoffQuestionnaire() {
           </p>
           <h1 className="mt-2 font-serif text-4xl tracking-tight sm:text-5xl">Questionnaire_</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-soft">
-            Scope selects which questions show. Answers autosave. The same systems are what
-            discovery will use for spaces, discrepancies, and the space guide.
+            Scope selects which questions show. Answers autosave. The same systems drive the
+            per-space checklist on{" "}
+            <Link className="underline underline-offset-2" to={`/projects/${project.id}/discovery`}>
+              Discovery
+            </Link>
+            .
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -509,8 +513,8 @@ export function KickoffQuestionnaire() {
               Scope
             </legend>
             <p className="mb-3 text-xs leading-5 text-ink-soft">
-              Project systems are kickoff. Space systems stay on this list for per-space discovery.
-              A question shows when any of its systems is on.
+              Project systems are kickoff. Space systems also feed the per-space discovery
+              checklist. A question shows when any of its systems is on.
             </p>
             <ul className="space-y-2">
               {systems.map((system) => (

@@ -160,6 +160,12 @@ export function ProjectDetail() {
             >
               Kickoff
             </Link>
+            <Link
+              to={`/projects/${project.id}/discovery`}
+              className="inline-flex items-center rounded-sm border border-rule bg-white px-3.5 py-2 text-sm font-medium text-ink hover:bg-paper-2"
+            >
+              Discovery
+            </Link>
             {brief ? (
               <Link
                 to={`/projects/${project.id}/brief`}
@@ -255,7 +261,11 @@ export function ProjectDetail() {
             <Link className="underline underline-offset-2" to={`/projects/${project.id}/kickoff`}>
               kickoff questionnaire
             </Link>{" "}
-            is a separate scope checklist.
+            and{" "}
+            <Link className="underline underline-offset-2" to={`/projects/${project.id}/discovery`}>
+              discovery
+            </Link>{" "}
+            share one system checklist.
           </p>
         ) : (
           <p className="mt-2 text-sm leading-6 text-ink-soft">
@@ -265,7 +275,11 @@ export function ProjectDetail() {
             <Link className="underline underline-offset-2" to={`/projects/${project.id}/kickoff`}>
               kickoff questionnaire
             </Link>{" "}
-            uses its own system checklist and can start now.
+            and{" "}
+            <Link className="underline underline-offset-2" to={`/projects/${project.id}/discovery`}>
+              discovery
+            </Link>{" "}
+            share one system checklist and can start now.
           </p>
         )}
       </section>
