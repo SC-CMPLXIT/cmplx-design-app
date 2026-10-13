@@ -132,6 +132,8 @@ export type BomItem = {
   space_id: string | null;
   category_key: string | null;
   notes: string;
+  /** Locked discovery answer this line was confirmed from. Null when typed in. */
+  discovery_answer_id: string | null;
   sort_order: number;
   created_at: string;
   updated_at: string;
@@ -263,6 +265,8 @@ export type DiscoverySpace = {
   occupancy: string;
   notes: string;
   thumbnail_attachment_id: string | null;
+  /** System-narrative space this room feeds. Null until linked. */
+  narrative_space_id: string | null;
   sort_order: number;
   created_at: string;
   updated_at: string;
@@ -331,6 +335,84 @@ export type DiscoveryBundle = {
   scope: ProjectSystemScope[];
   answers: DiscoveryAnswer[];
   discrepancies: DiscoveryDiscrepancy[];
+};
+
+export const PROPOSAL_KINDS = ["design", "implementation"] as const;
+
+export type ProposalKind = (typeof PROPOSAL_KINDS)[number];
+
+export const PROPOSAL_PHASES = ["procurement", "installation", "commissioning"] as const;
+
+export type ProposalPhase = (typeof PROPOSAL_PHASES)[number];
+
+export type ProjectProposal = {
+  id: string;
+  project_id: string;
+  kind: ProposalKind;
+  title: string;
+  subtitle: string;
+  client_name: string;
+  issued_on: string | null;
+  project_statement: string;
+  scope_note: string;
+  agreement_note: string;
+  design_rate_cents: number;
+  drafting_rate_cents: number;
+  ca_day_rate_cents: number;
+  bod_design_hours_per_1000: number;
+  bod_drafting_hours_per_1000: number;
+  dd_design_hours_per_1000: number;
+  dd_drafting_hours_per_1000: number;
+  ca_design_hours_per_1000: number;
+  ca_drafting_hours_per_1000: number;
+  ca_site_days: number;
+  labor_cents: number;
+  hardware_deposit_pct: number;
+  hardware_delivery_pct: number;
+  hardware_substantial_pct: number;
+  labor_deposit_pct: number;
+  labor_delivery_pct: number;
+  labor_substantial_pct: number;
+  scope_keys: string[];
+  assumption_keys: string[];
+  exclusion_keys: string[];
+  term_keys: string[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type ProposalLine = {
+  id: string;
+  proposal_id: string;
+  bom_item_id: string | null;
+  phase: ProposalPhase;
+  name: string;
+  system_key: string;
+  space_label: string;
+  quantity: number;
+  unit: string;
+  unit_msrp_cents: number | null;
+  notes: string;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+};
+
+export type ProposalBundle = {
+  proposal: ProjectProposal;
+  lines: ProposalLine[];
+};
+
+export type BomFromDiscovery = {
+  answer_id: string;
+  name: string;
+  description: string;
+  quantity: number;
+  unit: string;
+  notes: string;
+  space_id: string | null;
+  category_key: string | null;
 };
 
 export type AuthUser = {

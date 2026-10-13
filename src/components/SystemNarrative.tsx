@@ -2,7 +2,9 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { TECHNOLOGY_CATEGORIES } from "@/lib/categories";
 import { api } from "@/lib/api";
+import { applySuggestion } from "@/lib/discovery-suggestions";
 import type { NarrativeDraft, ProjectSpace, ScopeItem, SpaceSystemNarrative } from "@/lib/types";
+import { DiscoveryNarrativePanel } from "./DiscoveryNarrativePanel";
 import { Button, EmptyState, ErrorText, Field, fieldControlClass } from "./ui";
 
 const OVERVIEW_KEY = "__overview__";
@@ -320,6 +322,24 @@ export function SystemNarrative({
     });
   }
 
+  async function onInsertDiscovery(spaceId: string, categoryKey: string | null, block: string) {
+    const form = forms[spaceId];
+    if (!form) throw new Error("Open the narrative space before adding this answer.");
+    const current = form.bodies[keyOf(categoryKey)] ?? "";
+    const applied = applySuggestion(current, block);
+    const nextForm = {
+      ...form,
+      bodies: { ...form.bodies, [keyOf(categoryKey)]: applied.text },
+    };
+    patchBody(spaceId, categoryKey, applied.text);
+    const rows = rowsForSpace(spaceId, scopeItems, narratives, nextForm);
+    const saved = await api.saveNarratives(spaceId, draftsFor(spaceId, rows, nextForm, narratives));
+    setNarratives((currentRows) => [
+      ...currentRows.filter((row) => row.space_id !== spaceId),
+      ...saved,
+    ]);
+  }
+
   return (
     <section
       id="system-narrative"
@@ -346,6 +366,30 @@ export function SystemNarrative({
           </Link>
         ) : null}
       </div>
+
+      {mode === "edit" ? (
+        <DiscoveryNarrativePanel
+          projectId={projectId}
+          narrativeSpaces={ordered}
+          scopeItems={scopeItems}
+          disabled={busy}
+          bodyFor={(spaceId, categoryKey) => forms[spaceId]?.bodies[keyOf(categoryKey)] ?? ""}
+          onInsert={onInsertDiscovery}
+          onSpaceCreated={(created) => {
+            setSpaces((current) =>
+              current.some((space) => space.id === created.id)
+                ? current
+                : [...current, created].sort((a, b) => a.sort_order - b.sort_order),
+            );
+            setForms((current) =>
+              current[created.id]
+                ? current
+                : { ...current, [created.id]: { name: created.name, note: created.note, bodies: {} } },
+            );
+            setOpenId(created.id);
+          }}
+        />
+      ) : null}
 
       {mode === "summary" && !narrativeHref ? (
         <p className="mt-3 text-sm text-ink-soft">

@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { emptyToNull } from "@/lib/dates";
+import { parseAreaSf } from "@/lib/proposal-fee";
 import { PROJECT_STATUS_META } from "@/lib/status";
 import {
   PROJECT_STATUSES,
@@ -36,6 +37,7 @@ export function ProjectDetail() {
   const [status, setStatus] = useState<ProjectStatus>("pending");
   const [startDate, setStartDate] = useState("");
   const [targetDate, setTargetDate] = useState("");
+  const [area, setArea] = useState("");
 
   useEffect(() => {
     if (!projectId) return;
@@ -58,6 +60,7 @@ export function ProjectDetail() {
         setStatus(row.status);
         setStartDate(row.start_date ?? "");
         setTargetDate(row.target_date ?? "");
+        setArea(row.area_sf ? String(row.area_sf) : "");
         setUpdates(notes);
         setBrief(existingBrief);
       } catch (err) {
@@ -86,6 +89,7 @@ export function ProjectDetail() {
         status,
         start_date: emptyToNull(startDate),
         target_date: emptyToNull(targetDate),
+        area_sf: parseAreaSf(area),
       });
       setProject(updated);
       setNotice("Project saved.");
@@ -166,6 +170,12 @@ export function ProjectDetail() {
             >
               Discovery
             </Link>
+            <Link
+              to={`/projects/${project.id}/proposals/design`}
+              className="inline-flex items-center rounded-sm border border-rule bg-white px-3.5 py-2 text-sm font-medium text-ink hover:bg-paper-2"
+            >
+              Proposals
+            </Link>
             {brief ? (
               <Link
                 to={`/projects/${project.id}/brief`}
@@ -239,6 +249,17 @@ export function ProjectDetail() {
             />
           </Field>
         </div>
+        <Field
+          label="Gross area (sf)"
+          hint="Whole square feet. Design proposal hours use this area. Leave blank until it is known."
+        >
+          <input
+            className={fieldControlClass}
+            inputMode="numeric"
+            value={area}
+            onChange={(event) => setArea(event.target.value)}
+          />
+        </Field>
         <div className="md:col-span-2 flex flex-wrap items-center gap-3">
           <Button type="submit" disabled={saving}>
             Save project

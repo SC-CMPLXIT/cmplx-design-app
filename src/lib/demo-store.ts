@@ -1,5 +1,7 @@
 import { prepareBomDraft, prepareBomName } from "./bom";
 import { TECHNOLOGY_CATEGORIES } from "./categories";
+import { proposalIssues } from "./proposal-document";
+import { freshProposal } from "./proposal-draft";
 import { clearDemoFiles } from "./demo-files";
 import {
   DISCOVERY_ANSWER_LIMIT,
@@ -16,6 +18,7 @@ import {
 import {
   QUESTION_ANSWER_STATUSES,
   type AuthUser,
+  type BomFromDiscovery,
   type BomItem,
   type BomItemUpdate,
   type BriefDraft,
@@ -36,9 +39,13 @@ import {
   type NarrativeDraft,
   type Project,
   type ProjectDraft,
+  type ProjectProposal,
   type ProjectQuestionAnswer,
   type ProjectSpace,
   type ProjectSystemScope,
+  type ProposalBundle,
+  type ProposalKind,
+  type ProposalLine,
   type ScopeItem,
   type SpaceBundle,
   type SpaceDraft,
@@ -63,6 +70,8 @@ type DemoState = {
   discoveryAttachments: DiscoveryAttachment[];
   discoveryAnswers: DiscoveryAnswer[];
   discoveryDiscrepancies: DiscoveryDiscrepancy[];
+  proposals: ProjectProposal[];
+  proposalLines: ProposalLine[];
 };
 
 const CLUB_ID = "11111111-1111-4111-8111-111111111111";
@@ -88,6 +97,14 @@ const DEMO_SCOPE_ON: Record<string, readonly string[]> = {
 const DEMO_USER: AuthUser = {
   email: "editor@demo.cmplx",
   displayName: "Demo Editor",
+};
+
+const SEED_NARRATIVE_LINK: Record<string, string> = {
+  "e1111111-1111-4111-8111-111111111101": "a1111111-1111-4111-8111-111111111101",
+  "e1111111-1111-4111-8111-111111111102": "a1111111-1111-4111-8111-111111111102",
+  "e1111111-1111-4111-8111-111111111103": "a1111111-1111-4111-8111-111111111103",
+  "e2222222-2222-4222-8222-222222222201": "a2222222-2222-4222-8222-222222222201",
+  "e2222222-2222-4222-8222-222222222202": "a2222222-2222-4222-8222-222222222202",
 };
 
 function isoNow() {
@@ -316,6 +333,7 @@ function bomItem(
     space_id: spaceId,
     category_key: categoryKey,
     notes,
+    discovery_answer_id: null,
     sort_order: sortOrder,
     created_at: stamp,
     updated_at: stamp,
@@ -555,7 +573,11 @@ function discoveryQuestionsForDemo(): KickoffQuestion[] {
 }
 
 function seedDiscoverySpaces(): DiscoverySpace[] {
-  const rows: Array<Omit<DiscoverySpace, "created_at" | "updated_at" | "deleted_at"> & { stamp: string }> = [
+  const rows: Array<
+    Omit<DiscoverySpace, "created_at" | "updated_at" | "deleted_at" | "narrative_space_id"> & {
+      stamp: string;
+    }
+  > = [
     {
       id: "e1111111-1111-4111-8111-111111111101",
       project_id: CLUB_ID,
@@ -624,6 +646,7 @@ function seedDiscoverySpaces(): DiscoverySpace[] {
   ];
   return rows.map(({ stamp, ...row }) => ({
     ...row,
+    narrative_space_id: SEED_NARRATIVE_LINK[row.id] ?? null,
     created_at: stamp,
     updated_at: stamp,
     deleted_at: null,
@@ -784,6 +807,7 @@ function seedState(): DemoState {
         status: "on_track",
         start_date: "2026-03-01",
         target_date: "2026-09-30",
+        area_sf: 18000,
         created_at: "2026-03-01T12:00:00.000Z",
         updated_at: "2026-06-02T16:30:00.000Z",
         deleted_at: null,
@@ -917,6 +941,8 @@ function seedState(): DemoState {
     discoveryAttachments: [],
     discoveryAnswers: seedDiscoveryAnswers(),
     discoveryDiscrepancies: seedDiscoveryDiscrepancies(),
+    proposals: [],
+    proposalLines: [],
   };
 }
 
@@ -943,6 +969,36 @@ function mergeDiscovery(state: DemoState): boolean {
     state.discoveryDiscrepancies = seedDiscoveryDiscrepancies().filter(
       (row) => projectIds.has(row.project_id) && (row.space_id == null || liveSpaces.has(row.space_id)),
     );
+    changed = true;
+  }
+  return changed;
+}
+
+function mergeProposals(state: DemoState): boolean {
+  let changed = false;
+  if (!Array.isArray(state.proposals)) {
+    state.proposals = [];
+    changed = true;
+  }
+  if (!Array.isArray(state.proposalLines)) {
+    state.proposalLines = [];
+    changed = true;
+  }
+  for (const item of state.bomItems) {
+    if (item.discovery_answer_id === undefined) {
+      item.discovery_answer_id = null;
+      changed = true;
+    }
+  }
+  for (const space of state.discoverySpaces) {
+    if (!("narrative_space_id" in space) || space.narrative_space_id === undefined) {
+      space.narrative_space_id = SEED_NARRATIVE_LINK[space.id] ?? null;
+      changed = true;
+    }
+  }
+  const club = state.projects.find((project) => project.id === CLUB_ID);
+  if (club && club.area_sf === undefined) {
+    club.area_sf = 18000;
     changed = true;
   }
   return changed;
@@ -985,6 +1041,7 @@ function load(): DemoState {
     }
     if (mergeKickoff(parsed)) upgraded = true;
     if (mergeDiscovery(parsed)) upgraded = true;
+    if (mergeProposals(parsed)) upgraded = true;
     if (upgraded) persist(parsed);
     return parsed;
   } catch {
@@ -1058,7 +1115,10 @@ export const demoApi = {
     });
   },
 
-  updateProject(id: string, draft: Partial<ProjectDraft>): Project {
+  updateProject(
+    id: string,
+    draft: Partial<ProjectDraft> & { area_sf?: number | null },
+  ): Project {
     return mutate((state) => {
       const project = state.projects.find((row) => row.id === id && !row.deleted_at);
       if (!project) throw new Error("Project not found.");
@@ -1280,6 +1340,12 @@ export const demoApi = {
           line.updated_at = row.deleted_at;
         }
       }
+      for (const room of state.discoverySpaces) {
+        if (room.narrative_space_id === id) {
+          room.narrative_space_id = null;
+          room.updated_at = row.deleted_at;
+        }
+      }
       const project = state.projects.find(
         (item) => item.id === row.project_id && !item.deleted_at,
       );
@@ -1352,6 +1418,7 @@ export const demoApi = {
         sku: "",
         space_id: null,
         category_key: null,
+        discovery_answer_id: null,
         notes: "",
         sort_order: sortOrder,
         created_at: now,
@@ -1542,6 +1609,7 @@ export const demoApi = {
         id: crypto.randomUUID(),
         project_id: projectId,
         ...prepared,
+        narrative_space_id: null,
         sort_order: sortOrder,
         created_at: now,
         updated_at: now,
@@ -1770,6 +1838,215 @@ export const demoApi = {
       row.updated_at = row.deleted_at;
       const project = state.projects.find((item) => item.id === projectId && !item.deleted_at);
       if (project) project.updated_at = row.deleted_at;
+    });
+  },
+
+  linkDiscoveryNarrative(
+    projectId: string,
+    discoverySpaceId: string,
+    narrativeSpaceId: string | null,
+  ): DiscoverySpace {
+    return mutate((state) => {
+      const project = state.projects.find((row) => row.id === projectId && !row.deleted_at);
+      if (!project) throw new Error("Project not found.");
+      const room = state.discoverySpaces.find(
+        (item) => item.id === discoverySpaceId && item.project_id === projectId && !item.deleted_at,
+      );
+      if (!room) throw new Error("Discovery room not found.");
+      if (narrativeSpaceId) {
+        const space = state.spaces.find(
+          (item) => item.id === narrativeSpaceId && item.project_id === projectId && !item.deleted_at,
+        );
+        if (!space) throw new Error("Narrative space must be a live space on this project.");
+      }
+      room.narrative_space_id = narrativeSpaceId;
+      room.updated_at = isoNow();
+      project.updated_at = room.updated_at;
+      return { ...room };
+    });
+  },
+
+  createNarrativeFromDiscovery(
+    projectId: string,
+    discoverySpaceId: string,
+  ): { space: ProjectSpace; discovery: DiscoverySpace } {
+    return mutate((state) => {
+      const project = state.projects.find((row) => row.id === projectId && !row.deleted_at);
+      if (!project) throw new Error("Project not found.");
+      const room = state.discoverySpaces.find(
+        (item) => item.id === discoverySpaceId && item.project_id === projectId && !item.deleted_at,
+      );
+      if (!room) throw new Error("Discovery room not found.");
+      if (room.narrative_space_id) {
+        const existing = state.spaces.find(
+          (item) => item.id === room.narrative_space_id && item.project_id === projectId && !item.deleted_at,
+        );
+        if (existing) return { space: { ...existing }, discovery: { ...room } };
+      }
+      const now = isoNow();
+      const sortOrder =
+        state.spaces
+          .filter((item) => item.project_id === projectId && !item.deleted_at)
+          .reduce((max, item) => Math.max(max, item.sort_order), 0) + 1;
+      const space: ProjectSpace = {
+        id: crypto.randomUUID(),
+        project_id: projectId,
+        name: room.name.trim(),
+        note: room.intended_use.trim().slice(0, 400),
+        sort_order: sortOrder,
+        created_at: now,
+        updated_at: now,
+        deleted_at: null,
+      };
+      state.spaces.push(space);
+      room.narrative_space_id = space.id;
+      room.updated_at = now;
+      project.updated_at = now;
+      return { space: { ...space }, discovery: { ...room } };
+    });
+  },
+
+  createBomFromDiscovery(projectId: string, input: BomFromDiscovery): BomItem {
+    const prepared = prepareBomDraft({
+      name: input.name,
+      description: input.description,
+      quantity: input.quantity,
+      unit: input.unit,
+      manufacturer: "",
+      model: "",
+      sku: "",
+      space_id: input.space_id,
+      category_key: input.category_key,
+      notes: input.notes,
+    });
+    return mutate((state) => {
+      const project = state.projects.find((row) => row.id === projectId && !row.deleted_at);
+      if (!project) throw new Error("Project not found.");
+      const answer = state.discoveryAnswers.find(
+        (item) => item.id === input.answer_id && item.project_id === projectId,
+      );
+      if (!answer || answer.status !== "locked") {
+        throw new Error("Only a locked discovery answer can be added to the bill of materials.");
+      }
+      if (
+        state.bomItems.some(
+          (item) => item.discovery_answer_id === input.answer_id && !item.deleted_at,
+        )
+      ) {
+        throw new Error("That locked answer is already on the bill of materials.");
+      }
+      if (prepared.space_id) {
+        const space = state.spaces.find(
+          (item) => item.id === prepared.space_id && item.project_id === projectId && !item.deleted_at,
+        );
+        if (!space) throw new Error("A line points at a space that is no longer on this project.");
+      }
+      const now = isoNow();
+      const sortOrder =
+        state.bomItems
+          .filter((item) => item.project_id === projectId && !item.deleted_at)
+          .reduce((max, item) => Math.max(max, item.sort_order), 0) + 1;
+      const created: BomItem = {
+        id: crypto.randomUUID(),
+        project_id: projectId,
+        ...prepared,
+        discovery_answer_id: input.answer_id,
+        sort_order: sortOrder,
+        created_at: now,
+        updated_at: now,
+        deleted_at: null,
+      };
+      state.bomItems.push(created);
+      project.updated_at = now;
+      return { ...created };
+    });
+  },
+
+  getProposal(projectId: string, kind: ProposalKind): ProposalBundle {
+    return mutate((state) => {
+      const project = state.projects.find((row) => row.id === projectId && !row.deleted_at);
+      if (!project) throw new Error("Project not found.");
+      let proposal = state.proposals.find(
+        (row) => row.project_id === projectId && row.kind === kind,
+      );
+      if (!proposal) {
+        const now = isoNow();
+        const inScope = state.systemScope
+          .filter((row) => row.project_id === projectId && row.in_scope)
+          .map((row) => row.system_key);
+        proposal = {
+          id: crypto.randomUUID(),
+          ...freshProposal(project, kind, inScope),
+          created_at: now,
+          updated_at: now,
+        };
+        state.proposals.push(proposal);
+      }
+      return {
+        proposal: { ...proposal, scope_keys: [...proposal.scope_keys], assumption_keys: [...proposal.assumption_keys], exclusion_keys: [...proposal.exclusion_keys], term_keys: [...proposal.term_keys] },
+        lines: state.proposalLines
+          .filter((line) => line.proposal_id === proposal.id && !line.deleted_at)
+          .sort((a, b) => a.sort_order - b.sort_order)
+          .map((line) => ({ ...line })),
+      };
+    });
+  },
+
+  saveProposal(projectId: string, proposal: ProjectProposal, lines: ProposalLine[]): ProposalBundle {
+    const issues = proposalIssues(proposal);
+    if (issues.length) throw new Error(issues[0]);
+    if (proposal.project_id !== projectId) throw new Error("Proposal is not on this project.");
+    return mutate((state) => {
+      const project = state.projects.find((row) => row.id === projectId && !row.deleted_at);
+      if (!project) throw new Error("Project not found.");
+      const row = state.proposals.find((item) => item.id === proposal.id && item.project_id === projectId);
+      if (!row) throw new Error("Proposal not found.");
+      const now = isoNow();
+      Object.assign(row, proposal, { updated_at: now });
+      if (row.kind === "design") {
+        project.updated_at = now;
+        return { proposal: { ...row }, lines: [] };
+      }
+      const keep = new Set<string>();
+      const saved: ProposalLine[] = [];
+      lines.forEach((line, index) => {
+        const name = line.name.trim();
+        if (!name) throw new Error("Each fee line needs a name.");
+        const quantity = Math.round(Number(line.quantity) * 1000) / 1000;
+        if (!Number.isFinite(quantity) || quantity <= 0) {
+          throw new Error(`Quantity for “${name}” must be greater than zero.`);
+        }
+        keep.add(line.id);
+        const existing = state.proposalLines.find(
+          (item) => item.id === line.id && item.proposal_id === row.id,
+        );
+        const next: ProposalLine = {
+          ...(existing ?? line),
+          ...line,
+          proposal_id: row.id,
+          name,
+          quantity,
+          unit: line.unit.trim() || "ea",
+          system_key: line.system_key.trim(),
+          space_label: line.space_label.trim(),
+          notes: line.notes.trim(),
+          sort_order: index + 1,
+          updated_at: now,
+          deleted_at: null,
+          created_at: existing?.created_at ?? line.created_at ?? now,
+        };
+        if (existing) Object.assign(existing, next);
+        else state.proposalLines.push(next);
+        saved.push({ ...next });
+      });
+      for (const line of state.proposalLines) {
+        if (line.proposal_id === row.id && !line.deleted_at && !keep.has(line.id)) {
+          line.deleted_at = now;
+          line.updated_at = now;
+        }
+      }
+      project.updated_at = now;
+      return { proposal: { ...row }, lines: saved };
     });
   },
 };
