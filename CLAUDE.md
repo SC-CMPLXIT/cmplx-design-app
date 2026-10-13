@@ -20,7 +20,7 @@ Without them, `src/lib/supabase.ts` sets `dataMode` to `demo` and `src/lib/api.t
 ## Layout
 
 ```
-db/                    SQL migrations — apply 001 → 002 → 003 → 004 → 005 → 006 → 007
+db/                    SQL migrations — apply 001 → 002 → 003 → 004 → 005 → 006 → 007 → 008
 src/lib/               types, api, auth, supabase, demo store, categories, systems, cable fill, UPS sizing
 src/components/        screens + small UI primitives
 ```
@@ -45,10 +45,11 @@ After Auth sign-in, resolve the allowlist row (`editors.email` ilike jwt email).
 - v1.2 bill of materials: `bom_items` on a project. Optional `space_id` and `category_key`. Quantity is `numeric(12,3)`. No prices. Archiving a space clears `space_id` and keeps the line.
 - v1.3 kickoff: `technology_systems` is the shared scope checklist (project / space / both) for this questionnaire and discovery. `system_category_links` maps a system onto the standard-15 brief checklist. `scope_questions` (`bank = kickoff` or `discovery`) plus `scope_question_systems`. A question shows when any linked system is in scope. `project_system_scope` and `project_question_answers` (`open | answered | locked`) are per project. No client DELETE. Apply `db/006_kickoff.sql`.
 - v1.4 discovery: `discovery_spaces` (name, floor/zone `group_name`, plan shows, intended use, occupancy, notes, thumbnail, sort, soft delete) are separate from narrative `project_spaces`. `discovery_attachments` point at objects in the private Storage bucket `discovery` (`projects/<projectId>/<id>.<ext>`), shown with signed URLs. `discovery_answers` are per space and reuse `question_answer_status`. `discovery_discrepancies` are plan vs notes (`low | medium | high`, `open | resolved`). Apply `db/007_discovery.sql`.
+- v1.5 discovery exports: from `/projects/:projectId/discovery`, print/PDF and DOCX are the space guide (cover, project summary, per-space plan/use/occupancy, rendering thumbnail, per-system questions with status, discrepancy list). A plain-text agenda (copy and `.txt`) lists open questions by space and open discrepancies. `projects.area_sf` is gross square feet for later fee estimates. Apply `db/008_lmnt_seed.sql` by hand. That file fills an existing project when the row is present and does not insert one. It is a private seed, not demo data, and it is not copied into the client bundle.
 
 ## In / out of MVP
 
-**In:** editor CRUD, project list/detail, status notes, brief editor, print CSS, demo seed, spaces, per-space system narrative, project bill of materials, per-project kickoff questionnaire (`/projects/:projectId/kickoff`, scope-driven question bank, autosave, print/PDF, DOCX), per-project discovery (`/projects/:projectId/discovery`: rooms grouped by floor or zone, private floor-plan PDFs and rendering images, per-space question checklist, live-call mode, plan-vs-notes discrepancies), cable fill calculator (`/tools/cable-fill`, session-local, NEC Chapter 9 — no new tables), UPS calculator (`/tools/ups`, session-local IT-load sizing — no new tables). Index at `/tools`. Both calculators print (`window.print()`) and copy a plain-text summary of the current run. Session-local — no new tables, no project writes.
+**In:** editor CRUD, project list/detail, status notes, brief editor, print CSS, demo seed, spaces, per-space system narrative, project bill of materials, per-project kickoff questionnaire (`/projects/:projectId/kickoff`, scope-driven question bank, autosave, print/PDF, DOCX), per-project discovery (`/projects/:projectId/discovery`: rooms grouped by floor or zone, private floor-plan PDFs and rendering images, per-space question checklist, live-call mode, plan-vs-notes discrepancies, space-guide print/PDF and DOCX, plain-text call agenda), cable fill calculator (`/tools/cable-fill`, session-local, NEC Chapter 9 — no new tables), UPS calculator (`/tools/ups`, session-local IT-load sizing — no new tables). Index at `/tools`. Both calculators print (`window.print()`) and copy a plain-text summary of the current run. Session-local — no new tables, no project writes.
 
 **Out:** partners, exec links, finance, RAID, SharePoint, general file libraries, Tract, Soho House AM features, S1–S8 storyboard, PDF export, Granola design-review import.
 

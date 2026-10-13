@@ -61,6 +61,13 @@ This is a clean CMPLX-native product (Vite + React + Tailwind + Supabase). It is
 - **Discrepancies** (`discovery_discrepancies`) record what the plan shows, what the notes say, an optional room, severity `low | medium | high`, and status `open | resolved` with a resolution note.
 - Demo mode stores rooms, answers, and discrepancies in the same `localStorage` seed, and file bytes in this browser only. An older demo cache picks up the labeled seed on next load. Seed text stays prefixed `DEMO —`.
 
+## What v1.5 adds
+
+- **Space guide** from Discovery. **Print / PDF** uses the same browser print path as the brief. **Download DOCX** builds the guide in the browser: cover, project summary, each room (plan, intended use, occupancy, notes, and the rendering thumbnail when one is set), the in-scope questions with status and answer, then the discrepancy list. Thumbnails are fetched from the signed URL and embedded. A room with no rendering, or a file that will not load, prints “No rendering on file.”
+- **Agenda** is plain text for the call: open questions grouped by room, then open discrepancies. **Copy agenda** puts it on the clipboard. **Agenda .txt** downloads the same text. It does not call Granola and it does not create a share link.
+- **`projects.area_sf`** is gross area in square feet, null until known, for later proposal fee estimates. The space guide prints it when it is set. The project form does not edit it yet.
+- `db/008_lmnt_seed.sql` adds that column if it is missing. It does not insert a project. When one existing project row is present, it sets `area_sf` only while that column is still null, turns named systems on with updates, and inserts a status note, rooms, known answers, and discrepancies with `on conflict do nothing`. If that row is missing, those statements match nothing. No drawings. Applied by hand, safe to re-run, and not part of the demo bundle.
+
 ## Tools
 
 - **Tools index** (`/tools`): short list of the calculators. The header links here. Editors and demo mode. Signed-out visitors still see the landing page.
@@ -107,6 +114,7 @@ npm run preview
    - `db/005_bom.sql` — `bom_items`, editor RLS, DEMO equipment lines when the 003 projects and 004 spaces exist
    - `db/006_kickoff.sql` — `technology_systems`, `system_category_links`, `scope_questions`, `scope_question_systems`, `project_system_scope`, `project_question_answers`, editor RLS, DEMO scope and answers when the 003 projects exist
    - `db/007_discovery.sql` — `discovery_spaces`, `discovery_attachments`, `discovery_answers`, `discovery_discrepancies`, the private Storage bucket `discovery`, editor RLS, DEMO rooms, answers, and discrepancies when the 003 projects exist
+   - `db/008_lmnt_seed.sql` — `projects.area_sf` if missing. Does not insert a project. When the existing project row is present, `area_sf` is filled only while it is still null, scope is updated, and the status note, rooms, answers, and discrepancies use `on conflict do nothing`. A missing row is a no-op. No drawings. Not demo data.
 
    Apply `004` before using a build that includes v1.1. It needs Postgres 15+ (`UNIQUE NULLS NOT DISTINCT`), which is the Supabase default. Editors get select, insert, and update only — removing a space sets `deleted_at`. There is no client delete grant. `004` also revokes the default anon grants Supabase puts on new tables.
 
@@ -123,6 +131,8 @@ npm run preview
    - `discovery_objects_update` — replace an object. Storage upsert needs select, insert, and update.
 
    There is no delete policy and no policy for `anon`. Archive a file by setting `discovery_attachments.deleted_at`. The helper `public.discovery_object_allowed(object_name)` requires `is_editor()`, checks the key shape, and checks that the project is still live. `storage.objects` already has row level security; `007` does not turn it on.
+
+   Apply `008` after `007`. It is safe to re-run and it does not insert a project. The area column is added only if missing. When the existing project row is present, a re-run fills `area_sf` only while it is still null and leaves name, status, dates, and owner alone. Systems that the seed names are turned on with an update, and existing rooms, answers, discrepancies, and the status note are left in place (`on conflict do nothing`). If that row is missing, those updates and inserts match nothing and the script still succeeds. It revokes anon table grants again. It does not upload files and it does not grant deletes.
 3. Invite each editor (allowlist row + Auth invite). See below.
 4. Auth → URL configuration: Site URL `https://cmplx-design-app.vercel.app`, plus redirect URLs for that origin and `http://localhost:5173`.
 5. Put the project URL and **publishable** (legacy: anon) key in Vercel / `.env.local`.
@@ -170,7 +180,7 @@ Someone who can sign in but is missing from `editors` sees the not-editor screen
 | Table | Notes |
 | --- | --- |
 | `editors` | Email allowlist |
-| `projects` | UUID PK, owner, status enum, dates, `deleted_at` |
+| `projects` | UUID PK, owner, status enum, dates, optional `area_sf` (gross square feet), `deleted_at` |
 | `status_updates` | Dated notes; `project_id`, author, body |
 | `design_briefs` | 1:1 with project; header + three narratives (`design_intent`, `constraints`, `open_decisions`) |
 | `technology_categories` | Seeded standard-15 (also a constant in `src/lib/categories.ts`) |
@@ -197,7 +207,7 @@ Someone who can sign in but is missing from `editors` sees the not-editor screen
 - `/projects/:id` — status, notes, space list (add, rename, reorder, remove), bill of materials (`#bill-of-materials`), link/create brief, links to kickoff and discovery
 - `/projects/:id/brief` — editor + print, including the system narrative (`#system-narrative`) and the bill of materials (`#bill-of-materials`)
 - `/projects/:id/kickoff` — scope checklist, questionnaire, autosave, print/PDF, DOCX. Editors and demo mode. Signed-out visitors still see the landing page.
-- `/projects/:id/discovery` — rooms, drawings, per-space checklist, live call, plan-vs-notes discrepancies. Editors and demo mode. Signed-out visitors still see the landing page.
+- `/projects/:id/discovery` — rooms, drawings, per-space checklist, live call, plan-vs-notes discrepancies, space-guide print/PDF and DOCX, plain-text agenda. Editors and demo mode. Signed-out visitors still see the landing page.
 - `/tools` — calculator index (cable fill, UPS). Linked from the header. Editors and demo mode. Signed-out visitors still see the landing page.
 - `/tools/cable-fill` — NEC conduit fill calculator. Editors and demo mode. No project id. Session state only. Print and copy summary stay in the browser.
 - `/tools/ups` — IT-load UPS calculator. Editors and demo mode. No project id. Session state only. Print and copy summary stay in the browser.
@@ -268,6 +278,20 @@ Demo mode, with no Supabase env:
 12. At about 390px wide, the room form, a room card, the checklist, and live call stay inside the viewport.
 
 Signed out, `/projects/:id/discovery` stays on the landing page. An allowlisted editor in live mode uses the same route after `db/007_discovery.sql` is applied. Uploads then use the private `discovery` bucket and signed URLs.
+
+## Verify the space guide and agenda (v1.5)
+
+Demo mode, with no Supabase env:
+
+1. `npm run dev` and choose **Enter demo workspace**. Open **DEMO — North Dock Clubhouse** and choose **Discovery**.
+2. **Print / PDF** (or print preview). The page is the space guide: CMPLX iT header, project summary, each room with plan, intended use, and occupancy, questions with status, then discrepancies. The app header, demo banner, and room editor are not on the page. A room with no rendering says “No rendering on file.”
+3. **Download DOCX**. The file is named for the project and contains the same sections. A room with no rendering does not get a broken image.
+4. Open **Drawings**, upload a small PNG, and on **Spaces** set Lobby’s thumbnail to it. Print again and confirm the image is in that room. Download DOCX again and confirm the image is embedded. Remove the file and print once more: that room says “No rendering on file.”
+5. **Copy agenda**. The clipboard text groups open questions by room and then lists open discrepancies. The resolved lobby gap is not in the agenda. **Agenda .txt** downloads the same text. Neither button opens a share link.
+6. Open **DEMO — Atrium Bar Refresh**. The guide says there are no rooms. The agenda says there are no open questions and no open discrepancies.
+7. At about 390px wide, the export buttons wrap and stay inside the viewport.
+
+Signed out, the route stays on the landing page. Live mode uses the same buttons after `db/007_discovery.sql`. `db/008_lmnt_seed.sql` is a separate private seed and is not required for this check.
 
 ## Verify cable fill
 

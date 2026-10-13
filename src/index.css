@@ -48,6 +48,180 @@ textarea {
   resize: vertical;
 }
 
+.space-guide-print {
+  color: #1f2a44;
+  font-family: Calibri, Carlito, "Liberation Sans", sans-serif;
+  font-size: 10pt;
+  line-height: 1.35;
+}
+
+.space-guide-print h1,
+.space-guide-print h2,
+.space-guide-print h3,
+.space-guide-print p {
+  font-family: Calibri, Carlito, "Liberation Sans", sans-serif;
+  color: #1f2a44;
+}
+
+.space-guide-print h1,
+.space-guide-print h2 {
+  font-size: 12.5pt;
+  font-weight: 700;
+  margin: 10pt 0 4pt;
+  border-bottom: 1.5pt solid #1f2a44;
+  padding-bottom: 2pt;
+  break-after: avoid;
+}
+
+.space-guide-print h3 {
+  font-size: 10.5pt;
+  font-weight: 700;
+  margin: 8pt 0 2pt;
+  break-after: avoid;
+}
+
+.space-guide-print .guide-cover h1 {
+  font-size: 16pt;
+  border-bottom: 0;
+  margin-top: 8pt;
+  padding-bottom: 0;
+}
+
+.space-guide-print .guide-brand {
+  font-size: 8.5pt;
+  color: #666;
+  margin: 0;
+}
+
+.space-guide-print .guide-brand strong {
+  color: #1f2a44;
+  font-size: 11pt;
+}
+
+.space-guide-print .guide-draft {
+  color: #b03030 !important;
+  font-size: 8.5pt !important;
+}
+
+.space-guide-print .guide-sub,
+.space-guide-print .guide-missing,
+.space-guide-print .guide-caption,
+.space-guide-print .guide-empty {
+  color: #666;
+  font-style: italic;
+  font-size: 8.5pt;
+}
+
+.space-guide-print .guide-group {
+  margin: 14pt 0 0;
+  font-size: 8pt;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #666;
+}
+
+.space-guide-print .guide-kv {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 4pt 0 8pt;
+}
+
+.space-guide-print .guide-kv th,
+.space-guide-print .guide-kv td {
+  border: 0.5pt solid #c5cedd;
+  padding: 3pt 6pt;
+  vertical-align: top;
+  text-align: left;
+  font-weight: 400;
+  white-space: pre-wrap;
+}
+
+.space-guide-print .guide-kv th {
+  width: 1.6in;
+  background: #e8ecf3;
+  font-weight: 700;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+.space-guide-print .guide-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 2.55in;
+  gap: 10pt;
+  align-items: start;
+}
+
+.space-guide-print .guide-copy p,
+.space-guide-print .guide-hero p,
+.space-guide-print .guide-gap p {
+  margin: 0 0 3pt;
+  white-space: pre-wrap;
+}
+
+.space-guide-print .guide-figure {
+  margin: 0;
+  text-align: center;
+}
+
+.space-guide-print .guide-figure img {
+  width: 2.4in;
+  height: auto;
+  object-fit: contain;
+}
+
+.space-guide-print .guide-fallback {
+  display: none;
+  color: #666;
+  font-style: italic;
+  font-size: 8.5pt;
+}
+
+.space-guide-print img[data-broken="true"] {
+  display: none !important;
+}
+
+.space-guide-print img[data-broken="true"] ~ .guide-caption {
+  display: none;
+}
+
+.space-guide-print img[data-broken="true"] ~ .guide-fallback {
+  display: block;
+}
+
+.space-guide-print .guide-prompt {
+  font-weight: 700;
+  margin: 6pt 0 1pt;
+}
+
+.space-guide-print .guide-status {
+  margin: 0;
+  font-size: 8.5pt;
+  font-weight: 700;
+}
+
+.space-guide-print .guide-status-open,
+.space-guide-print .guide-gap-hot {
+  color: #b03030;
+}
+
+.space-guide-print .guide-status-answered {
+  color: #1f2a44;
+}
+
+.space-guide-print .guide-status-locked,
+.space-guide-print .guide-answer.guide-empty {
+  color: #666;
+}
+
+.space-guide-print .guide-answer {
+  margin: 0 0 4pt;
+  white-space: pre-wrap;
+}
+
+.space-guide-print .guide-answer.guide-empty {
+  font-style: italic;
+}
+
 .print-only {
   display: none;
 }
@@ -147,6 +321,17 @@ textarea {
 
   .kickoff-answer {
     white-space: pre-wrap;
+  }
+
+  .space-guide-print .guide-qa,
+  .space-guide-print .guide-gap,
+  .space-guide-print .guide-hero,
+  .space-guide-print tr {
+    break-inside: avoid;
+  }
+
+  .space-guide-print .guide-discrepancies {
+    break-before: page;
   }
 
   input,

@@ -23,6 +23,8 @@ export type Project = {
   status: ProjectStatus;
   start_date: string | null;
   target_date: string | null;
+  /** Gross area in square feet. Null until known. Column added in db/008_lmnt_seed.sql. */
+  area_sf?: number | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
