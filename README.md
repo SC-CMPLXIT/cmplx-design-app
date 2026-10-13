@@ -66,7 +66,7 @@ This is a clean CMPLX-native product (Vite + React + Tailwind + Supabase). It is
 - **Space guide** from Discovery. **Print / PDF** uses the same browser print path as the brief. **Download DOCX** builds the guide in the browser: cover, project summary, each room (plan, intended use, occupancy, notes, and the rendering thumbnail when one is set), the in-scope questions with status and answer, then the discrepancy list. Thumbnails are fetched from the signed URL and embedded. A room with no rendering, or a file that will not load, prints “No rendering on file.”
 - **Agenda** is plain text for the call: open questions grouped by room, then open discrepancies. **Copy agenda** puts it on the clipboard. **Agenda .txt** downloads the same text. It does not call Granola and it does not create a share link.
 - **`projects.area_sf`** is gross area in square feet, null until known, for later proposal fee estimates. The space guide prints it when it is set. The project form does not edit it yet.
-- `db/008_lmnt_seed.sql` adds that column if it is missing and seeds one private project by a fixed UUID (scope turned on with updates; rooms, known answers, discrepancies; no drawings). It is applied by hand, it is safe to re-run, and it is not part of the demo bundle.
+- `db/008_lmnt_seed.sql` adds that column if it is missing. It does not insert a project. When one existing project row is present, it sets `area_sf` only while that column is still null, turns named systems on with updates, and inserts a status note, rooms, known answers, and discrepancies with `on conflict do nothing`. If that row is missing, those statements match nothing. No drawings. Applied by hand, safe to re-run, and not part of the demo bundle.
 
 ## Tools
 
@@ -114,7 +114,7 @@ npm run preview
    - `db/005_bom.sql` — `bom_items`, editor RLS, DEMO equipment lines when the 003 projects and 004 spaces exist
    - `db/006_kickoff.sql` — `technology_systems`, `system_category_links`, `scope_questions`, `scope_question_systems`, `project_system_scope`, `project_question_answers`, editor RLS, DEMO scope and answers when the 003 projects exist
    - `db/007_discovery.sql` — `discovery_spaces`, `discovery_attachments`, `discovery_answers`, `discovery_discrepancies`, the private Storage bucket `discovery`, editor RLS, DEMO rooms, answers, and discrepancies when the 003 projects exist
-   - `db/008_lmnt_seed.sql` — `projects.area_sf` if missing, then one private project by a fixed UUID. Scope is updated, not inserted. Rooms, answers, and discrepancies use `on conflict do nothing`. No drawings. Not demo data.
+   - `db/008_lmnt_seed.sql` — `projects.area_sf` if missing. Does not insert a project. When the existing project row is present, `area_sf` is filled only while it is still null, scope is updated, and the status note, rooms, answers, and discrepancies use `on conflict do nothing`. A missing row is a no-op. No drawings. Not demo data.
 
    Apply `004` before using a build that includes v1.1. It needs Postgres 15+ (`UNIQUE NULLS NOT DISTINCT`), which is the Supabase default. Editors get select, insert, and update only — removing a space sets `deleted_at`. There is no client delete grant. `004` also revokes the default anon grants Supabase puts on new tables.
 
@@ -132,7 +132,7 @@ npm run preview
 
    There is no delete policy and no policy for `anon`. Archive a file by setting `discovery_attachments.deleted_at`. The helper `public.discovery_object_allowed(object_name)` requires `is_editor()`, checks the key shape, and checks that the project is still live. `storage.objects` already has row level security; `007` does not turn it on.
 
-   Apply `008` after `007` when that private project should exist. It is safe to re-run: the area column is added only if missing, a re-run fills `area_sf` only when it is still null, systems that the seed names are turned on with an update, and existing rooms, answers, discrepancies, and the status note are left in place. It revokes anon table grants again. It does not upload files and it does not grant deletes.
+   Apply `008` after `007`. It is safe to re-run and it does not insert a project. The area column is added only if missing. When the existing project row is present, a re-run fills `area_sf` only while it is still null and leaves name, status, dates, and owner alone. Systems that the seed names are turned on with an update, and existing rooms, answers, discrepancies, and the status note are left in place (`on conflict do nothing`). If that row is missing, those updates and inserts match nothing and the script still succeeds. It revokes anon table grants again. It does not upload files and it does not grant deletes.
 3. Invite each editor (allowlist row + Auth invite). See below.
 4. Auth → URL configuration: Site URL `https://cmplx-design-app.vercel.app`, plus redirect URLs for that origin and `http://localhost:5173`.
 5. Put the project URL and **publishable** (legacy: anon) key in Vercel / `.env.local`.

@@ -3,7 +3,11 @@
 -- Idempotent and non-destructive. Safe to re-run. Applied by hand in the SQL editor.
 --
 -- Adds projects.area_sf when it is missing (gross square feet, for later fee estimates).
--- Seeds one project on a fixed UUID. Re-runs do not insert a second copy.
+-- Does not insert a project. The LMNT row already exists:
+--   6f902e35-0120-4df0-89d1-1596fbdfe8e1
+-- If that row is missing, the updates and inserts below match nothing and
+-- the script still succeeds. Name, status, dates, and owner are left as they are.
+-- area_sf is set to 11500 only while it is still null.
 -- New projects already receive project_system_scope rows, so scope is turned on
 -- with updates. Re-applying sets those systems in scope again and leaves every
 -- other system flag alone.
@@ -29,29 +33,18 @@ end $$;
 revoke all on table public.projects from anon;
 revoke all on all tables in schema public from anon;
 
-insert into public.projects as p (
-  id, name, owner, status, start_date, target_date, area_sf
-)
-values (
-  '11000000-1100-4110-8110-000000000110',
-  'LMNT — 110 Worcester',
-  'Sam Conklin',
-  'pending',
-  null,
-  null,
-  11500
-)
-on conflict (id) do update
-set area_sf = excluded.area_sf
-where p.area_sf is null;
-
 -- Site is 110 Worcester St, Wellesley, MA. Opening window in the source notes
 -- is Mar/Apr 2027. Commercial state is the status note, not a contract date.
--- 11,500 is the gross area.
+-- 11,500 is the gross area. Name, status, dates, and owner stay as entered.
+
+update public.projects
+set area_sf = 11500
+where id = '6f902e35-0120-4df0-89d1-1596fbdfe8e1'
+  and area_sf is null;
 
 update public.project_system_scope
 set in_scope = true
-where project_id = '11000000-1100-4110-8110-000000000110'
+where project_id = '6f902e35-0120-4df0-89d1-1596fbdfe8e1'
   and system_key in (
     'general',
     'carrier_riser',
@@ -69,14 +62,14 @@ where project_id = '11000000-1100-4110-8110-000000000110'
 insert into public.status_updates (id, project_id, author, body, created_at)
 select
   '11000000-1100-4110-8110-000000000201',
-  '11000000-1100-4110-8110-000000000110',
+  '6f902e35-0120-4df0-89d1-1596fbdfe8e1',
   'Sam Conklin',
   'NDA only, no contract',
   '2026-10-12T21:00:00Z'
 where exists (
   select 1
   from public.projects p
-  where p.id = '11000000-1100-4110-8110-000000000110'
+  where p.id = '6f902e35-0120-4df0-89d1-1596fbdfe8e1'
     and p.deleted_at is null
 )
 on conflict (id) do nothing;
@@ -86,7 +79,7 @@ insert into public.discovery_spaces (
 )
 select
   v.id,
-  '11000000-1100-4110-8110-000000000110',
+  '6f902e35-0120-4df0-89d1-1596fbdfe8e1',
   v.name,
   v.group_name,
   v.plan_shows,
@@ -242,7 +235,7 @@ from (
 where exists (
   select 1
   from public.projects p
-  where p.id = '11000000-1100-4110-8110-000000000110'
+  where p.id = '6f902e35-0120-4df0-89d1-1596fbdfe8e1'
     and p.deleted_at is null
 )
 on conflict (id) do nothing;
@@ -252,7 +245,7 @@ insert into public.discovery_answers (
 )
 select
   v.id,
-  '11000000-1100-4110-8110-000000000110',
+  '6f902e35-0120-4df0-89d1-1596fbdfe8e1',
   v.space_id,
   v.question_key,
   v.body,
@@ -525,7 +518,7 @@ where exists (
   select 1
   from public.discovery_spaces s
   where s.id = v.space_id
-    and s.project_id = '11000000-1100-4110-8110-000000000110'
+    and s.project_id = '6f902e35-0120-4df0-89d1-1596fbdfe8e1'
     and s.deleted_at is null
 )
 on conflict (space_id, question_key) do nothing;
@@ -535,7 +528,7 @@ insert into public.discovery_discrepancies (
 )
 select
   v.id,
-  '11000000-1100-4110-8110-000000000110',
+  '6f902e35-0120-4df0-89d1-1596fbdfe8e1',
   v.space_id,
   v.plan_shows,
   v.notes_say,
@@ -620,7 +613,7 @@ from (
 where exists (
   select 1
   from public.projects p
-  where p.id = '11000000-1100-4110-8110-000000000110'
+  where p.id = '6f902e35-0120-4df0-89d1-1596fbdfe8e1'
     and p.deleted_at is null
 )
 and (
@@ -629,7 +622,7 @@ and (
     select 1
     from public.discovery_spaces s
     where s.id = v.space_id
-      and s.project_id = '11000000-1100-4110-8110-000000000110'
+      and s.project_id = '6f902e35-0120-4df0-89d1-1596fbdfe8e1'
   )
 )
 on conflict (id) do nothing;
