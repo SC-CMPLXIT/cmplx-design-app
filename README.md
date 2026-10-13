@@ -45,10 +45,21 @@ This is a clean CMPLX-native product (Vite + React + Tailwind + Supabase). It is
 - **Kickoff questionnaire** at `/projects/:id/kickoff`. One per project. Editors only. No share link.
 - **Systems** (`technology_systems`) are the scope checklist: General, Carrier & riser, IT infrastructure, Network / Wi-Fi, Display / video, Audio, Conferencing, Control, Security, Acoustics. `applies_to` is `project`, `space`, or `both`, so a later Discovery feature can reuse the same keys for per-space checklists, discrepancies, space-guide exports, and proposal scope.
 - **`system_category_links`** maps each system onto the standard-15 brief checklist (a system may match more than one category). Acoustics has no brief category. **Add systems from the brief** turns matching systems on and does not turn any off.
-- **Question bank** (`scope_questions`, `bank = kickoff`) is the basis-of-design questionnaire: General, Carrier service & riser, IT infrastructure, Audio visual, Access control, Video surveillance. `scope_question_systems` says which systems show a question. A question shows when any linked system is in scope. `bank = discovery` is reserved and has no rows yet.
+- **Question bank** (`scope_questions`, `bank = kickoff`) is the basis-of-design questionnaire: General, Carrier service & riser, IT infrastructure, Audio visual, Access control, Video surveillance. `scope_question_systems` says which systems show a question. A question shows when any linked system is in scope. `bank = discovery` is the per-space bank seeded in v1.4.
 - **Answers** (`project_question_answers`) store body plus status `open | answered | locked`. They autosave. Locked answers are read-only until an editor sets Open or Answered. Clearing the text does not delete the row. Turning a system off hides its questions and keeps the answers.
 - **Print / PDF** uses the same browser print path as the brief. **Download DOCX** builds a branded questionnaire in the browser (CMPLX iT header, scope, sections, status, answers).
 - Demo mode stores scope and answers in the same `localStorage` seed. An older demo cache picks up the labeled seed on next load. Seed answer text stays prefixed `DEMO —`.
+
+## What v1.4 adds
+
+- **Discovery** at `/projects/:id/discovery`. One per project. Editors only. No share link.
+- **Rooms** (`discovery_spaces`) are the call list: name, group (a floor or zone), what the plan shows, intended use, occupancy, notes, and an optional thumbnail. Add them, group them, and reorder inside a group. They are not the system-narrative spaces on the project page.
+- **Drawings** (`discovery_attachments`) are a floor-plan PDF and rendering images. Bytes go in the private Storage bucket `discovery`, under `projects/<projectId>/<attachmentId>.<ext>`. The app shows them with signed URLs. A room can use a rendering as its thumbnail. Removing a file sets `deleted_at` and clears that thumbnail. There is no client delete of the object.
+- **Checklist** is `scope_questions` where `bank = discovery`. A question shows on every room when one of its systems is in scope and that system applies to a space (`space` or `both`): IT infrastructure, Network / Wi-Fi, Display / video, Audio, Conferencing, Control, Security, Acoustics. It reuses `technology_systems` and `project_system_scope`. It does not add a second system list.
+- **Answers** (`discovery_answers`) are per project and per room, with the same `open | answered | locked` status and autosave as kickoff. Locked text stays read-only until an editor sets Open or Answered.
+- **Live call** walks one room at a time. `j` / `k` or the up and down arrows move questions. Left and right arrows, or `[` and `]`, move rooms. `a` marks the current question answered. `n` jumps to quick notes. Enter types in the answer. Esc leaves a field. Shortcuts stay quiet while the cursor is in a field, so a Zoom call can keep its own keys.
+- **Discrepancies** (`discovery_discrepancies`) record what the plan shows, what the notes say, an optional room, severity `low | medium | high`, and status `open | resolved` with a resolution note.
+- Demo mode stores rooms, answers, and discrepancies in the same `localStorage` seed, and file bytes in this browser only. An older demo cache picks up the labeled seed on next load. Seed text stays prefixed `DEMO —`.
 
 ## Tools
 
@@ -58,7 +69,7 @@ This is a clean CMPLX-native product (Vite + React + Tailwind + Supabase). It is
 
 ## What is out of MVP
 
-Partners, exec share links, finance, RAID, file uploads, SharePoint, Tract, Soho House account-manager features, the full S1–S8 storyboard, and Granola design-review import.
+Partners, exec share links, finance, RAID, SharePoint, general file libraries, Tract, Soho House account-manager features, the full S1–S8 storyboard, and Granola design-review import. Discovery floor plans and renderings are the only uploads.
 
 ## Environment
 
@@ -95,12 +106,23 @@ npm run preview
    - `db/004_spaces_narrative.sql` — `project_spaces`, `space_system_narratives`, editor RLS, DEMO spaces when the 003 projects exist
    - `db/005_bom.sql` — `bom_items`, editor RLS, DEMO equipment lines when the 003 projects and 004 spaces exist
    - `db/006_kickoff.sql` — `technology_systems`, `system_category_links`, `scope_questions`, `scope_question_systems`, `project_system_scope`, `project_question_answers`, editor RLS, DEMO scope and answers when the 003 projects exist
+   - `db/007_discovery.sql` — `discovery_spaces`, `discovery_attachments`, `discovery_answers`, `discovery_discrepancies`, the private Storage bucket `discovery`, editor RLS, DEMO rooms, answers, and discrepancies when the 003 projects exist
 
    Apply `004` before using a build that includes v1.1. It needs Postgres 15+ (`UNIQUE NULLS NOT DISTINCT`), which is the Supabase default. Editors get select, insert, and update only — removing a space sets `deleted_at`. There is no client delete grant. `004` also revokes the default anon grants Supabase puts on new tables.
 
    Apply `005` before using a build that includes v1.2. It is safe to re-run the DEMO insert (`on conflict do nothing`). Editors get select, insert, and update only — removing a line sets `deleted_at`. `005` revokes the default anon grants Supabase puts on the new table. Archiving a space (setting `project_spaces.deleted_at`) clears `bom_items.space_id` for that room; the lines stay on the project.
 
    Apply `006` before using a build that includes v1.3. It is safe to re-run: system names, prompts, and the scope-to-question mapping refresh, and existing scope flags and answers are left in place (`on conflict do nothing`). Editors get select on the question bank and systems, and select, insert, and update on scope and answers. There is no client delete grant. `006` revokes the default anon grants Supabase puts on the new tables. Signed-out visitors still have no table access.
+
+   Apply `007` before using a build that includes v1.4. It is safe to re-run: discovery prompts and their system links refresh, and existing rooms, files, answers, and discrepancies stay (`on conflict do nothing`). Editors get select, insert, and update only. There is no client delete grant. `007` revokes the default anon grants Supabase puts on the new tables.
+
+   `007` also creates the private Storage bucket `discovery` (not public, 20 MB, PDF / JPEG / PNG / WebP) and three policies on `storage.objects` for `authenticated` editors (`is_editor()`), limited to keys `projects/<project uuid>/<file uuid>.<ext>` on a live project:
+
+   - `discovery_objects_select` — read an object. Signed URLs need this.
+   - `discovery_objects_insert` — upload a new object.
+   - `discovery_objects_update` — replace an object. Storage upsert needs select, insert, and update.
+
+   There is no delete policy and no policy for `anon`. Archive a file by setting `discovery_attachments.deleted_at`. The helper `public.discovery_object_allowed(object_name)` requires `is_editor()`, checks the key shape, and checks that the project is still live. `storage.objects` already has row level security; `007` does not turn it on.
 3. Invite each editor (allowlist row + Auth invite). See below.
 4. Auth → URL configuration: Site URL `https://cmplx-design-app.vercel.app`, plus redirect URLs for that origin and `http://localhost:5173`.
 5. Put the project URL and **publishable** (legacy: anon) key in Vercel / `.env.local`.
@@ -158,19 +180,24 @@ Someone who can sign in but is missing from `editors` sees the not-editor screen
 | `bom_items` | Equipment lines on a project. Quantity is `numeric(12,3)`. `space_id` and `category_key` are optional. `deleted_at` removes a line |
 | `technology_systems` | Canonical systems for kickoff and later discovery. `applies_to` is `project`, `space`, or `both` |
 | `system_category_links` | System → standard-15 category. Many-to-many |
-| `scope_questions` | Question bank. `bank` is `kickoff` now; `discovery` is reserved |
+| `scope_questions` | Question bank. `bank` is `kickoff` or `discovery` |
 | `scope_question_systems` | Question → systems. Visible when any linked system is in scope |
 | `project_system_scope` | Per-project scope flag. One row per project and system. Shared with later discovery |
-| `project_question_answers` | Per-project answer. `status` is `open`, `answered`, or `locked`. Body up to 8,000 characters |
+| `project_question_answers` | Per-project kickoff answer. `status` is `open`, `answered`, or `locked`. Body up to 8,000 characters |
+| `discovery_spaces` | Discovery rooms. `group_name` is a floor or zone. Plan shows, intended use, occupancy, notes, optional rendering thumbnail, `deleted_at` |
+| `discovery_attachments` | Floor-plan PDF or rendering. `storage_path` is `projects/<project_id>/<id>.<ext>` in the private `discovery` bucket |
+| `discovery_answers` | Per room. Same `open`, `answered`, `locked` status as kickoff. One row per space and discovery question |
+| `discovery_discrepancies` | Plan vs notes. Optional room, severity `low` / `medium` / `high`, status `open` / `resolved`, resolution note, `deleted_at` |
 
 ## App map
 
 - `/` → redirects to `/projects` (signed-out users see the landing gate)
 - `/projects` — list + status pills
 - `/projects/new` — create
-- `/projects/:id` — status, notes, space list (add, rename, reorder, remove), bill of materials (`#bill-of-materials`), link/create brief, link to kickoff
+- `/projects/:id` — status, notes, space list (add, rename, reorder, remove), bill of materials (`#bill-of-materials`), link/create brief, links to kickoff and discovery
 - `/projects/:id/brief` — editor + print, including the system narrative (`#system-narrative`) and the bill of materials (`#bill-of-materials`)
 - `/projects/:id/kickoff` — scope checklist, questionnaire, autosave, print/PDF, DOCX. Editors and demo mode. Signed-out visitors still see the landing page.
+- `/projects/:id/discovery` — rooms, drawings, per-space checklist, live call, plan-vs-notes discrepancies. Editors and demo mode. Signed-out visitors still see the landing page.
 - `/tools` — calculator index (cable fill, UPS). Linked from the header. Editors and demo mode. Signed-out visitors still see the landing page.
 - `/tools/cable-fill` — NEC conduit fill calculator. Editors and demo mode. No project id. Session state only. Print and copy summary stay in the browser.
 - `/tools/ups` — IT-load UPS calculator. Editors and demo mode. No project id. Session state only. Print and copy summary stay in the browser.
@@ -222,6 +249,25 @@ Demo mode, with no Supabase env:
 10. At about 390px wide, the scope list stacks above the questions and both stay inside the viewport.
 
 Signed out, `/projects/:id/kickoff` stays on the landing page. An allowlisted editor in live mode uses the same route after `db/006_kickoff.sql` is applied.
+
+## Verify discovery (v1.4)
+
+Demo mode, with no Supabase env:
+
+1. `npm run dev` and choose **Enter demo workspace**. A demo cache from before v1.4 picks up rooms, answers, and discrepancies on next load. Use **Reset demo data** if you want the labeled seed back in full.
+2. Open **DEMO — North Dock Clubhouse** and choose **Discovery**. Public floor has Lobby and Dock-side room. Support has Back of house. Seed text starts with `DEMO —`.
+3. Move Dock-side room **Up**. It stays on Public floor and swaps with Lobby. Reload and confirm the order.
+4. Add a room (name and a group, for example `Level 2`). Reload and confirm it is still there. **Remove** it and confirm it is gone.
+5. Change Lobby notes, wait for **Saved**, reload, and confirm the text is still there.
+6. Open **Drawings**. Upload a small PNG and a small PDF. The image previews. **Open PDF** opens the file. On the Spaces tab, set Lobby's thumbnail to that rendering. Reload and confirm the thumbnail is still selected.
+7. Open **Checklist** on Dock-side room. Display / video, audio, conferencing, control, network / Wi-Fi, security, and IT infrastructure are present. Acoustics is absent until you turn it on in Kickoff. The locked display-location answer does not accept typing. The open conferencing answer does.
+8. Type into an open answer, wait for **Saved**, reload, and confirm the text. Set it to **Answered**, reload, and confirm the status.
+9. Choose **Live call**. `j` and `k` (or the up and down arrows) move the question when focus is not in a field. `a` marks it answered. `[` and `]` (or the left and right arrows) change rooms. `n` focuses quick notes. Type a note, wait for **Saved**, leave the call, and confirm the note is on that room.
+10. Open **Discrepancies**. Confirm the open dock-side gap, the open whole-project gap, and the resolved lobby gap with its resolution note. Add a gap, set it to **Resolved**, write a resolution note, reload, and confirm it. **Remove** one and confirm it is gone.
+11. Open **DEMO — Atrium Bar Refresh**. Discovery has no rooms and no discrepancies. The checklist asks you to add a room. Every system is off, so a new room still has no questions until Kickoff turns a space system on.
+12. At about 390px wide, the room form, a room card, the checklist, and live call stay inside the viewport.
+
+Signed out, `/projects/:id/discovery` stays on the landing page. An allowlisted editor in live mode uses the same route after `db/007_discovery.sql` is applied. Uploads then use the private `discovery` bucket and signed URLs.
 
 ## Verify cable fill
 

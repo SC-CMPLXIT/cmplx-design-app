@@ -158,7 +158,7 @@ export const SYSTEM_APPLIES_TO = ["project", "space", "both"] as const;
 
 export type SystemAppliesTo = (typeof SYSTEM_APPLIES_TO)[number];
 
-/** `discovery` is reserved for the later per-space question bank. */
+/** `kickoff` is the project questionnaire. `discovery` is the per-space bank. */
 export const QUESTION_BANKS = ["kickoff", "discovery"] as const;
 
 export type QuestionBank = (typeof QUESTION_BANKS)[number];
@@ -221,6 +221,114 @@ export type KickoffBundle = {
   questions: KickoffQuestion[];
   scope: ProjectSystemScope[];
   answers: ProjectQuestionAnswer[];
+};
+
+export const DISCOVERY_ATTACHMENT_KINDS = ["floor_plan", "rendering"] as const;
+
+export type DiscoveryAttachmentKind = (typeof DISCOVERY_ATTACHMENT_KINDS)[number];
+
+export const DISCOVERY_SEVERITIES = ["low", "medium", "high"] as const;
+
+export type DiscoverySeverity = (typeof DISCOVERY_SEVERITIES)[number];
+
+export const DISCOVERY_DISCREPANCY_STATUSES = ["open", "resolved"] as const;
+
+export type DiscoveryDiscrepancyStatus = (typeof DISCOVERY_DISCREPANCY_STATUSES)[number];
+
+export type DiscoveryAttachment = {
+  id: string;
+  project_id: string;
+  kind: DiscoveryAttachmentKind;
+  storage_path: string;
+  file_name: string;
+  content_type: string;
+  byte_size: number;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+  /** Time-limited URL. Null when the object is missing. Not a database column. */
+  signed_url: string | null;
+};
+
+export type DiscoverySpace = {
+  id: string;
+  project_id: string;
+  name: string;
+  group_name: string;
+  plan_shows: string;
+  intended_use: string;
+  occupancy: string;
+  notes: string;
+  thumbnail_attachment_id: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+};
+
+export type DiscoverySpaceDraft = {
+  name: string;
+  group_name: string;
+  plan_shows: string;
+  intended_use: string;
+  occupancy: string;
+  notes: string;
+  thumbnail_attachment_id: string | null;
+};
+
+export type DiscoveryAnswer = {
+  id: string;
+  project_id: string;
+  space_id: string;
+  question_key: string;
+  body: string;
+  status: QuestionAnswerStatus;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DiscoveryAnswerDraft = {
+  space_id: string;
+  question_key: string;
+  body: string;
+  status: QuestionAnswerStatus;
+};
+
+export type DiscoveryDiscrepancy = {
+  id: string;
+  project_id: string;
+  space_id: string | null;
+  plan_shows: string;
+  notes_say: string;
+  severity: DiscoverySeverity;
+  status: DiscoveryDiscrepancyStatus;
+  resolution_note: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+  /** Derived from the space row. Not a database column. */
+  space_name: string | null;
+  space_archived: boolean;
+};
+
+export type DiscoveryDiscrepancyDraft = {
+  space_id: string | null;
+  plan_shows: string;
+  notes_say: string;
+  severity: DiscoverySeverity;
+  status: DiscoveryDiscrepancyStatus;
+  resolution_note: string;
+};
+
+export type DiscoveryBundle = {
+  spaces: DiscoverySpace[];
+  attachments: DiscoveryAttachment[];
+  systems: TechnologySystem[];
+  questions: KickoffQuestion[];
+  scope: ProjectSystemScope[];
+  answers: DiscoveryAnswer[];
+  discrepancies: DiscoveryDiscrepancy[];
 };
 
 export type AuthUser = {
