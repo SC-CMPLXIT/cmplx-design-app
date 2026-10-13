@@ -14,7 +14,8 @@
 --     file_size_limit 20971520 (20 MiB)
 --     allowed_mime_types: application/pdf, image/jpeg, image/png, image/webp
 --   Helper: public.discovery_object_allowed(object_name)
---     true only for projects/<project uuid>/<object uuid>.(pdf|jpg|png|webp)
+--     true only for an editor, and only for
+--     projects/<project uuid>/<object uuid>.(pdf|jpg|png|webp)
 --     when that project exists and is not archived
 --   Policies on storage.objects (role authenticated, editors only via is_editor()):
 --     discovery_objects_select  — read an object (signed URLs need this)
@@ -336,7 +337,7 @@ begin
     when invalid_text_representation then
       return false;
   end;
-  return exists (
+  return public.is_editor() and exists (
     select 1
     from public.projects p
     where p.id = project_id
@@ -346,7 +347,7 @@ end;
 $$;
 
 comment on function public.discovery_object_allowed(text) is
-  'True when the object key is projects/<project uuid>/<file uuid>.<ext> and that project is still live.';
+  'True when the caller is an editor, the object key is projects/<project uuid>/<file uuid>.<ext>, and that project is still live.';
 
 revoke all on function public.discovery_object_allowed(text) from public, anon;
 grant execute on function public.discovery_object_allowed(text) to authenticated;
@@ -457,7 +458,8 @@ set
   file_size_limit = excluded.file_size_limit,
   allowed_mime_types = excluded.allowed_mime_types;
 
-alter table storage.objects enable row level security;
+-- storage.objects already has row level security, owned by Supabase's storage admin.
+-- Do not enable it here: a non-owner fails with "must be owner of table objects".
 
 drop policy if exists discovery_objects_select on storage.objects;
 create policy discovery_objects_select on storage.objects

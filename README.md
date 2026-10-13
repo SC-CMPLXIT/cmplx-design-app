@@ -122,7 +122,7 @@ npm run preview
    - `discovery_objects_insert` — upload a new object.
    - `discovery_objects_update` — replace an object. Storage upsert needs select, insert, and update.
 
-   There is no delete policy and no policy for `anon`. Archive a file by setting `discovery_attachments.deleted_at`. The helper `public.discovery_object_allowed(object_name)` checks the key shape and that the project is still live.
+   There is no delete policy and no policy for `anon`. Archive a file by setting `discovery_attachments.deleted_at`. The helper `public.discovery_object_allowed(object_name)` requires `is_editor()`, checks the key shape, and checks that the project is still live. `storage.objects` already has row level security; `007` does not turn it on.
 3. Invite each editor (allowlist row + Auth invite). See below.
 4. Auth → URL configuration: Site URL `https://cmplx-design-app.vercel.app`, plus redirect URLs for that origin and `http://localhost:5173`.
 5. Put the project URL and **publishable** (legacy: anon) key in Vercel / `.env.local`.
