@@ -65,8 +65,19 @@ This is a clean CMPLX-native product (Vite + React + Tailwind + Supabase). It is
 
 - **Space guide** from Discovery. **Print / PDF** uses the same browser print path as the brief. **Download DOCX** builds the guide in the browser: cover, project summary, each room (plan, intended use, occupancy, notes, and the rendering thumbnail when one is set), the in-scope questions with status and answer, then the discrepancy list. Thumbnails are fetched from the signed URL and embedded. A room with no rendering, or a file that will not load, prints “No rendering on file.”
 - **Agenda** is plain text for the call: open questions grouped by room, then open discrepancies. **Copy agenda** puts it on the clipboard. **Agenda .txt** downloads the same text. It does not call Granola and it does not create a share link.
-- **`projects.area_sf`** is gross area in square feet, null until known, for later proposal fee estimates. The space guide prints it when it is set. The project form does not edit it yet.
+- **`projects.area_sf`** is gross area in square feet, null until known. The space guide prints it when it is set. The project page and both proposal drafts edit it.
 - `db/008_lmnt_seed.sql` adds that column if it is missing. It does not insert a project. When one existing project row is present, it sets `area_sf` only while that column is still null, turns named systems on with updates, and inserts a status note, rooms, known answers, and discrepancies with `on conflict do nothing`. If that row is missing, those statements match nothing. No drawings. Applied by hand, safe to re-run, and not part of the demo bundle.
+
+## What v1.6 adds
+
+- **Narrative link.** A discovery room can point at a system-narrative space (`discovery_spaces.narrative_space_id`). On the brief, **Link to** uses a same-name match, the menu picks any live space, and **Create narrative space** adds one from the room name and links it. Creating again when a live link exists does not add a second space. Archiving the narrative space clears the link. Discovery rooms stay.
+- **Locked answers into the narrative.** A locked answer on an in-scope system is a suggestion for the linked space. **Fill empty note** writes it when that category note is blank. **Append** adds it under existing text. The button stays off when that exact block is already in the note. Nothing is written until the editor presses the button, and the save is immediate.
+- **Locked answers into the bill of materials.** On the project page, each locked answer can become one equipment line. Name, quantity, unit, and notes are editable before **Add to bill of materials**. The description is the locked text. Manufacturer, model, SKU, and price stay empty. The line is assigned to the linked narrative space, or left unassigned. A second confirm of the same answer is refused.
+- **Proposals.** `/projects/:id/proposals/design` and `/projects/:id/proposals/implementation` each store one draft. Both use the same section order: Project Statement, Scope, Service Fee, Agreement, Assumptions, Exclusions, Terms. **Print / PDF** uses the browser print path. **Download DOCX** builds the file in the browser. There is no share link. The agreement says the draft is subject to the CMPLX iT Master Subcontractor Agreement and is not an executed contract. Key terms on the page: subcontractors are paid within 15 days of invoice, Background IP stays with the author, and deliverables transfer on full payment.
+- **Design fee.** Hours for a phase are `area_sf / 1,000 × hours per 1,000 sf`. Dollars are those hours times the rate, rounded to the cent. CA site days are a count for the whole project, times the site-day rate. Defaults, all visible and editable: $200 / design hour, $110 / drafting hour, $1,200 / CA site day; Basis of Design 6 design and 2 drafting hours per 1,000 sf; DD–CD 10 and 8; CA 2 and 1, plus 4 site days. On 11,500 sf that is $60,115. No other multiplier. Consulting invoices are net 30, late amounts accrue 1.5% per month, and reimbursables are cost plus 10%.
+- **Implementation fee.** Lines come from the project bill of materials (**Pull bill of materials**) or are typed in. Unit MSRP stays blank until an editor enters it. Extended price is quantity times that unit price. Blank MSRP is listed and left out of the hardware total. Labor is a dollar amount the editor types, default $0. No markup. Work phases are procurement, installation, and commissioning. Payment milestones keep hardware and labor separate: ordering deposit, delivery, substantial completion. Hardware defaults to 90% / 8% / 2%. Labor defaults to 0% / 75% / 25%. Each column must add to 100%. The last milestone is the remainder so the dollars match the column total.
+- **Scope, assumptions, exclusions.** Scope blocks live in `src/content/proposals/scopes/`. The first open of a draft ticks blocks whose systems are in scope. Hospitality and the combined design-and-implementation block are listed and left off until an editor ticks them. **Suggest again** replaces the ticks from current scope. Assumptions, exclusions, and the extra term clauses are toggleable and live in `src/lib/proposal-library.ts`.
+- `db/009_discovery_proposals.sql` adds the link column, `bom_items.discovery_answer_id`, `project_proposals`, and `proposal_lines`. It does not insert a project, a price, or a proposal. Applied by hand, safe to re-run, no client delete grant, anon revoked.
 
 ## Tools
 
@@ -115,6 +126,7 @@ npm run preview
    - `db/006_kickoff.sql` — `technology_systems`, `system_category_links`, `scope_questions`, `scope_question_systems`, `project_system_scope`, `project_question_answers`, editor RLS, DEMO scope and answers when the 003 projects exist
    - `db/007_discovery.sql` — `discovery_spaces`, `discovery_attachments`, `discovery_answers`, `discovery_discrepancies`, the private Storage bucket `discovery`, editor RLS, DEMO rooms, answers, and discrepancies when the 003 projects exist
    - `db/008_lmnt_seed.sql` — `projects.area_sf` if missing. Does not insert a project. When the existing project row is present, `area_sf` is filled only while it is still null, scope is updated, and the status note, rooms, answers, and discrepancies use `on conflict do nothing`. A missing row is a no-op. No drawings. Not demo data.
+   - `db/009_discovery_proposals.sql` — `discovery_spaces.narrative_space_id`, `bom_items.discovery_answer_id`, `project_proposals`, `proposal_lines`, editor RLS. Does not insert a project, a price, or a proposal.
 
    Apply `004` before using a build that includes v1.1. It needs Postgres 15+ (`UNIQUE NULLS NOT DISTINCT`), which is the Supabase default. Editors get select, insert, and update only — removing a space sets `deleted_at`. There is no client delete grant. `004` also revokes the default anon grants Supabase puts on new tables.
 
@@ -133,6 +145,8 @@ npm run preview
    There is no delete policy and no policy for `anon`. Archive a file by setting `discovery_attachments.deleted_at`. The helper `public.discovery_object_allowed(object_name)` requires `is_editor()`, checks the key shape, and checks that the project is still live. `storage.objects` already has row level security; `007` does not turn it on.
 
    Apply `008` after `007`. It is safe to re-run and it does not insert a project. The area column is added only if missing. When the existing project row is present, a re-run fills `area_sf` only while it is still null and leaves name, status, dates, and owner alone. Systems that the seed names are turned on with an update, and existing rooms, answers, discrepancies, and the status note are left in place (`on conflict do nothing`). If that row is missing, those updates and inserts match nothing and the script still succeeds. It revokes anon table grants again. It does not upload files and it does not grant deletes.
+
+   Apply `009` after `008` before using a build that includes v1.6. It is safe to re-run: new columns use `if not exists`, enums and foreign keys ignore duplicates, and policies and triggers are dropped and recreated. It does not insert rows and it does not grant deletes. Editors get select, insert, and update on `project_proposals` and `proposal_lines`. A re-run leaves stored drafts, milestone percents, MSRP amounts, and narrative links in place.
 3. Invite each editor (allowlist row + Auth invite). See below.
 4. Auth → URL configuration: Site URL `https://cmplx-design-app.vercel.app`, plus redirect URLs for that origin and `http://localhost:5173`.
 5. Put the project URL and **publishable** (legacy: anon) key in Vercel / `.env.local`.
@@ -187,25 +201,29 @@ Someone who can sign in but is missing from `editors` sees the not-editor screen
 | `brief_scope_items` | Per-brief checklist rows |
 | `project_spaces` | Rooms or zones on a project. `name`, `sort_order`, `note`, `deleted_at` |
 | `space_system_narratives` | Per space. `category_key` null is the overview; otherwise a standard-15 key. One row per `(space_id, category_key)` |
-| `bom_items` | Equipment lines on a project. Quantity is `numeric(12,3)`. `space_id` and `category_key` are optional. `deleted_at` removes a line |
+| `bom_items` | Equipment lines on a project. Quantity is `numeric(12,3)`. `space_id` and `category_key` are optional. `discovery_answer_id` is set when an editor confirms a locked answer. `deleted_at` removes a line. No price |
 | `technology_systems` | Canonical systems for kickoff and later discovery. `applies_to` is `project`, `space`, or `both` |
 | `system_category_links` | System → standard-15 category. Many-to-many |
 | `scope_questions` | Question bank. `bank` is `kickoff` or `discovery` |
 | `scope_question_systems` | Question → systems. Visible when any linked system is in scope |
 | `project_system_scope` | Per-project scope flag. One row per project and system. Shared with later discovery |
 | `project_question_answers` | Per-project kickoff answer. `status` is `open`, `answered`, or `locked`. Body up to 8,000 characters |
-| `discovery_spaces` | Discovery rooms. `group_name` is a floor or zone. Plan shows, intended use, occupancy, notes, optional rendering thumbnail, `deleted_at` |
+| `discovery_spaces` | Discovery rooms. `group_name` is a floor or zone. Plan shows, intended use, occupancy, notes, optional rendering thumbnail, optional `narrative_space_id`, `deleted_at` |
 | `discovery_attachments` | Floor-plan PDF or rendering. `storage_path` is `projects/<project_id>/<id>.<ext>` in the private `discovery` bucket |
 | `discovery_answers` | Per room. Same `open`, `answered`, `locked` status as kickoff. One row per space and discovery question |
 | `discovery_discrepancies` | Plan vs notes. Optional room, severity `low` / `medium` / `high`, status `open` / `resolved`, resolution note, `deleted_at` |
+| `project_proposals` | One draft per project and kind (`design` or `implementation`). Fee assumptions, milestone percents, and included library keys |
+| `proposal_lines` | Implementation fee lines. `unit_msrp_cents` is null until an editor enters it. Optional `bom_item_id`. `deleted_at` removes a line |
 
 ## App map
 
 - `/` → redirects to `/projects` (signed-out users see the landing gate)
 - `/projects` — list + status pills
 - `/projects/new` — create
-- `/projects/:id` — status, notes, space list (add, rename, reorder, remove), bill of materials (`#bill-of-materials`), link/create brief, links to kickoff and discovery
-- `/projects/:id/brief` — editor + print, including the system narrative (`#system-narrative`) and the bill of materials (`#bill-of-materials`)
+- `/projects/:id` — status, notes, gross area, space list (add, rename, reorder, remove), bill of materials (`#bill-of-materials`, including locked-discovery suggestions), link/create brief, links to kickoff, discovery, and proposals
+- `/projects/:id/brief` — editor + print, including the system narrative (`#system-narrative`, including locked-discovery suggestions) and the bill of materials (`#bill-of-materials`)
+- `/projects/:id/proposals/design` — stored design proposal, fee math from `area_sf`, print/PDF, DOCX
+- `/projects/:id/proposals/implementation` — stored implementation proposal, MSRP lines, milestone split, print/PDF, DOCX
 - `/projects/:id/kickoff` — scope checklist, questionnaire, autosave, print/PDF, DOCX. Editors and demo mode. Signed-out visitors still see the landing page.
 - `/projects/:id/discovery` — rooms, drawings, per-space checklist, live call, plan-vs-notes discrepancies, space-guide print/PDF and DOCX, plain-text agenda. Editors and demo mode. Signed-out visitors still see the landing page.
 - `/tools` — calculator index (cable fill, UPS). Linked from the header. Editors and demo mode. Signed-out visitors still see the landing page.
@@ -292,6 +310,21 @@ Demo mode, with no Supabase env:
 7. At about 390px wide, the export buttons wrap and stay inside the viewport.
 
 Signed out, the route stays on the landing page. Live mode uses the same buttons after `db/007_discovery.sql`. `db/008_lmnt_seed.sql` is a separate private seed and is not required for this check.
+
+## Verify discovery into narrative, materials, and proposals (v1.6)
+
+Demo mode, with no Supabase env. Use **Reset demo data** if this browser already has a cache from before v1.6.
+
+1. Open **DEMO — North Dock Clubhouse**. Gross area is 18,000. Save still keeps the name and status.
+2. Open the brief and **System narrative**. Dock-side room is already linked. The locked display-location answer is a suggestion. **Fill empty note** or **Append** writes it into Display / video and leaves any text that was already there. Pressing it again reads **Already in this note**.
+3. On a room that is not linked, **Create narrative space**. The new space appears in the list and the suggestion can be added. Creating again does not add a second space.
+4. Back on the project, **Bill of materials** shows the same locked answer. Edit the quantity, then **Add to bill of materials**. The line has no manufacturer and no price. Adding it again is refused.
+5. **Proposals** opens the design draft. The fee table shows Basis of Design, DD–CD, and construction administration, with the hours-per-1,000-sf assumptions and a total of $91,380 at 18,000 sf and the defaults. Change one hours box and the amount follows. Clear the area and the hour columns go blank.
+6. Open **DEMO — Harbor Inn Guest Rooms** design proposal. Area is blank until you type it, and the fee total stays blank.
+7. On the clubhouse implementation proposal, **Pull bill of materials** copies equipment lines and leaves unit MSRP blank. Type an MSRP and the extended amount is quantity times that price. Hardware milestones start at 90 / 8 / 2 and labor at 0 / 75 / 25. Change one percent so a column is not 100 and **Save draft** refuses it.
+8. **Print / PDF** shows the proposal sections and hides the editor. **Download DOCX** saves a file named for the project. Neither opens a share link.
+
+Signed out, both proposal routes stay on the landing page. Live mode uses them after `db/009_discovery_proposals.sql`.
 
 ## Verify cable fill
 

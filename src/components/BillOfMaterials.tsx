@@ -5,6 +5,7 @@ import { TECHNOLOGY_CATEGORIES } from "@/lib/categories";
 import { api } from "@/lib/api";
 import type { BomItem, BomItemDraft, ProjectSpace, ScopeItem } from "@/lib/types";
 import { Button, EmptyState, ErrorText, Field, fieldControlClass } from "./ui";
+import { DiscoveryBomPanel } from "./DiscoveryBomPanel";
 
 type BomForm = {
   name: string;
@@ -410,6 +411,24 @@ export function BillOfMaterials({
           </Link>
         ) : null}
       </div>
+
+      {mode === "edit" ? (
+        <DiscoveryBomPanel
+          projectId={projectId}
+          items={ordered}
+          spaces={spaces}
+          scopeItems={scopeItems}
+          disabled={busy}
+          onCreated={(created) => {
+            setItems((current) =>
+              [...current, created].sort(
+                (a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name),
+              ),
+            );
+            setForms((current) => ({ ...current, [created.id]: formFrom(created) }));
+          }}
+        />
+      ) : null}
 
       {loading ? (
         <p className="mt-6 font-serif text-2xl text-ink-soft">Loading bill of materials_</p>

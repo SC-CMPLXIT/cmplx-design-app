@@ -1,4 +1,6 @@
 import { prepareBomDraft, prepareBomName } from "./bom";
+import { proposalIssues } from "./proposal-document";
+import { freshProposal } from "./proposal-draft";
 import { TECHNOLOGY_CATEGORIES } from "./categories";
 import { demoApi } from "./demo-store";
 import {
@@ -16,6 +18,7 @@ import { KICKOFF_ANSWER_LIMIT } from "./systems";
 import { getSupabase, isSupabaseConfigured } from "./supabase";
 import {
   QUESTION_ANSWER_STATUSES,
+  type BomFromDiscovery,
   type BomItem,
   type BomItemUpdate,
   type BriefDraft,
@@ -34,11 +37,16 @@ import {
   type KickoffQuestion,
   type KickoffScopeUpdate,
   type NarrativeDraft,
+  type ProjectProposal,
   type Project,
   type ProjectDraft,
   type ProjectQuestionAnswer,
   type ProjectSpace,
   type ProjectSystemScope,
+  type ProposalBundle,
+  type ProposalKind,
+  type ProposalLine,
+  type ProposalPhase,
   type QuestionBank,
   type ScopeItem,
   type SpaceBundle,
@@ -51,6 +59,7 @@ import {
 
 const KICKOFF_SETUP = "Kickoff is not in this database yet. Apply db/006_kickoff.sql.";
 const DISCOVERY_SETUP = "Discovery is not in this database yet. Apply db/007_discovery.sql.";
+const PROPOSAL_SETUP = "Proposals are not in this database yet. Apply db/009_discovery_proposals.sql.";
 
 function requireMessage(error: { message: string } | null, fallback: string) {
   if (error) throw new Error(error.message || fallback);
@@ -141,7 +150,10 @@ export const api = {
     return data as Project;
   },
 
-  async updateProject(id: string, draft: Partial<ProjectDraft>): Promise<Project> {
+  async updateProject(
+    id: string,
+    draft: Partial<ProjectDraft> & { area_sf?: number | null },
+  ): Promise<Project> {
     if (!isSupabaseConfigured) return demoApi.updateProject(id, draft);
     const { data, error } = await getSupabase()
       .from("projects")
@@ -961,6 +973,244 @@ export const api = {
     if (!data) throw new Error("Discrepancy not found.");
     await touchProject(projectId);
   },
+
+  async linkDiscoveryNarrative(
+    projectId: string,
+    discoverySpaceId: string,
+    narrativeSpaceId: string | null,
+  ): Promise<DiscoverySpace> {
+    if (!isSupabaseConfigured) {
+      return demoApi.linkDiscoveryNarrative(projectId, discoverySpaceId, narrativeSpaceId);
+    }
+    if (narrativeSpaceId) await assertBomSpaces(projectId, [narrativeSpaceId]);
+    const { data, error } = await getSupabase()
+      .from("discovery_spaces")
+      .update({ narrative_space_id: narrativeSpaceId })
+      .eq("id", discoverySpaceId)
+      .eq("project_id", projectId)
+      .is("deleted_at", null)
+      .select("*")
+      .maybeSingle();
+    proposalOrThrow(error, "Could not link that discovery room.");
+    if (!data) throw new Error("Discovery room not found.");
+    await touchProject(projectId);
+    return data as DiscoverySpace;
+  },
+
+  async createNarrativeFromDiscovery(
+    projectId: string,
+    discoverySpaceId: string,
+  ): Promise<{ space: ProjectSpace; discovery: DiscoverySpace }> {
+    if (!isSupabaseConfigured) {
+      return demoApi.createNarrativeFromDiscovery(projectId, discoverySpaceId);
+    }
+    const { data, error } = await getSupabase()
+      .from("discovery_spaces")
+      .select("*")
+      .eq("id", discoverySpaceId)
+      .eq("project_id", projectId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    proposalOrThrow(error, "Could not create a narrative space.");
+    const room = data as DiscoverySpace | null;
+    if (!room) throw new Error("Discovery room not found.");
+    if (room.narrative_space_id) {
+      const { data: existing, error: existingError } = await getSupabase()
+        .from("project_spaces")
+        .select("*")
+        .eq("id", room.narrative_space_id)
+        .eq("project_id", projectId)
+        .is("deleted_at", null)
+        .maybeSingle();
+      proposalOrThrow(existingError, "Could not create a narrative space.");
+      if (existing) return { space: existing as ProjectSpace, discovery: room };
+    }
+    const note = room.intended_use.trim().slice(0, 400);
+    const space = await api.createSpace(projectId, room.name, note);
+    const discovery = await api.linkDiscoveryNarrative(projectId, room.id, space.id);
+    return { space, discovery };
+  },
+
+  async createBomFromDiscovery(projectId: string, input: BomFromDiscovery): Promise<BomItem> {
+    const prepared = prepareBomDraft({
+      name: input.name,
+      description: input.description,
+      quantity: input.quantity,
+      unit: input.unit,
+      manufacturer: "",
+      model: "",
+      sku: "",
+      space_id: input.space_id,
+      category_key: input.category_key,
+      notes: input.notes,
+    });
+    if (!isSupabaseConfigured) return demoApi.createBomFromDiscovery(projectId, { ...input, ...prepared });
+    await assertBomSpaces(projectId, [prepared.space_id]);
+    const supabase = getSupabase();
+    const { data: answer, error: answerError } = await supabase
+      .from("discovery_answers")
+      .select("id, status, project_id")
+      .eq("id", input.answer_id)
+      .eq("project_id", projectId)
+      .maybeSingle();
+    proposalOrThrow(answerError, "Could not add the equipment line.");
+    if (!answer || (answer as { status: string }).status !== "locked") {
+      throw new Error("Only a locked discovery answer can be added to the bill of materials.");
+    }
+    const { data: last, error: lastError } = await supabase
+      .from("bom_items")
+      .select("sort_order")
+      .eq("project_id", projectId)
+      .is("deleted_at", null)
+      .order("sort_order", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    proposalOrThrow(lastError, "Could not add the equipment line.");
+    const sortOrder = ((last as { sort_order: number } | null)?.sort_order ?? 0) + 1;
+    const { data, error } = await supabase
+      .from("bom_items")
+      .insert({
+        project_id: projectId,
+        ...prepared,
+        discovery_answer_id: input.answer_id,
+        sort_order: sortOrder,
+      })
+      .select("*")
+      .single();
+    if (error && /bom_items_discovery_answer_live_idx|duplicate key/i.test(error.message)) {
+      throw new Error("That locked answer is already on the bill of materials.");
+    }
+    proposalOrThrow(error, "Could not add the equipment line.");
+    await touchProject(projectId);
+    return asBomItem(data as RawBomItem);
+  },
+
+  async getProposal(projectId: string, kind: ProposalKind): Promise<ProposalBundle> {
+    if (!isSupabaseConfigured) return demoApi.getProposal(projectId, kind);
+    const project = await api.getProject(projectId);
+    if (!project) throw new Error("Project not found.");
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from("project_proposals")
+      .select("*")
+      .eq("project_id", projectId)
+      .eq("kind", kind)
+      .maybeSingle();
+    proposalOrThrow(error, "Could not load the proposal.");
+    let proposal = data ? asProposal(data as RawProposal) : null;
+    if (!proposal) {
+      const { data: scopeRows, error: scopeError } = await supabase
+        .from("project_system_scope")
+        .select("system_key, in_scope")
+        .eq("project_id", projectId);
+      proposalOrThrow(scopeError, "Could not load the proposal.");
+      const inScope = ((scopeRows ?? []) as Array<{ system_key: string; in_scope: boolean }>)
+        .filter((row) => row.in_scope)
+        .map((row) => row.system_key);
+      const { data: created, error: insertError } = await supabase
+        .from("project_proposals")
+        .insert(freshProposal(project, kind, inScope))
+        .select("*")
+        .single();
+      if (insertError && /duplicate key|project_proposals_project_kind/i.test(insertError.message)) {
+        const { data: again, error: againError } = await supabase
+          .from("project_proposals")
+          .select("*")
+          .eq("project_id", projectId)
+          .eq("kind", kind)
+          .single();
+        proposalOrThrow(againError, "Could not load the proposal.");
+        proposal = asProposal(again as RawProposal);
+      } else {
+        proposalOrThrow(insertError, "Could not start the proposal.");
+        proposal = asProposal(created as RawProposal);
+      }
+    }
+    const { data: lineRows, error: lineError } = await supabase
+      .from("proposal_lines")
+      .select("*")
+      .eq("proposal_id", proposal.id)
+      .is("deleted_at", null)
+      .order("sort_order", { ascending: true });
+    proposalOrThrow(lineError, "Could not load the proposal.");
+    return {
+      proposal,
+      lines: ((lineRows ?? []) as RawProposalLine[]).map(asProposalLine),
+    };
+  },
+
+  async saveProposal(
+    projectId: string,
+    proposal: ProjectProposal,
+    lines: ProposalLine[],
+  ): Promise<ProposalBundle> {
+    const issues = proposalIssues(proposal);
+    if (issues.length) throw new Error(issues[0]);
+    if (proposal.project_id !== projectId) throw new Error("Proposal is not on this project.");
+    if (!isSupabaseConfigured) return demoApi.saveProposal(projectId, proposal, lines);
+    const supabase = getSupabase();
+    const { id, created_at: _created, updated_at: _updated, ...patch } = proposal;
+    const { data, error } = await supabase
+      .from("project_proposals")
+      .update(patch)
+      .eq("id", id)
+      .eq("project_id", projectId)
+      .select("*")
+      .maybeSingle();
+    proposalOrThrow(error, "Could not save the proposal.");
+    if (!data) throw new Error("Proposal not found.");
+    const saved = asProposal(data as RawProposal);
+    if (saved.kind === "design") {
+      return { proposal: saved, lines: [] };
+    }
+    const prepared = lines.map((line, index) => prepareProposalLine(saved.id, line, index));
+    const { data: existing, error: existingError } = await supabase
+      .from("proposal_lines")
+      .select("id")
+      .eq("proposal_id", saved.id)
+      .is("deleted_at", null);
+    proposalOrThrow(existingError, "Could not save the proposal.");
+    const keep = new Set(prepared.map((line) => line.id));
+    const now = new Date().toISOString();
+    await Promise.all(
+      ((existing ?? []) as Array<{ id: string }>)
+        .filter((line) => !keep.has(line.id))
+        .map(async (line) => {
+          const { error: archiveError } = await supabase
+            .from("proposal_lines")
+            .update({ deleted_at: now })
+            .eq("id", line.id)
+            .eq("proposal_id", saved.id);
+          proposalOrThrow(archiveError, "Could not save the proposal.");
+        }),
+    );
+    const savedLines = await Promise.all(
+      prepared.map(async (line) => {
+        const { id: lineId, ...values } = line;
+        const { data: updated, error: updateError } = await supabase
+          .from("proposal_lines")
+          .update(values)
+          .eq("id", lineId)
+          .eq("proposal_id", saved.id)
+          .select("*")
+          .maybeSingle();
+        proposalOrThrow(updateError, "Could not save the proposal.");
+        if (updated) return asProposalLine(updated as RawProposalLine);
+        const { data: inserted, error: insertError } = await supabase
+          .from("proposal_lines")
+          .insert({ id: lineId, ...values })
+          .select("*")
+          .single();
+        proposalOrThrow(insertError, "Could not save the proposal.");
+        return asProposalLine(inserted as RawProposalLine);
+      }),
+    );
+    await touchProject(projectId);
+    return {
+      proposal: saved,
+      lines: savedLines.sort((a, b) => a.sort_order - b.sort_order),
+    };
+  },
 };
 
 type RawBomItem = Omit<BomItem, "quantity" | "description" | "unit" | "manufacturer" | "model" | "sku" | "notes"> & {
@@ -985,7 +1235,128 @@ function asBomItem(row: RawBomItem): BomItem {
     notes: row.notes ?? "",
     space_id: row.space_id ?? null,
     category_key: row.category_key ?? null,
+    discovery_answer_id: row.discovery_answer_id ?? null,
   };
+}
+
+const PROPOSAL_PHASE_SET = new Set<ProposalPhase>(["procurement", "installation", "commissioning"]);
+
+type RawProposal = Omit<
+  ProjectProposal,
+  | "design_rate_cents"
+  | "drafting_rate_cents"
+  | "ca_day_rate_cents"
+  | "bod_design_hours_per_1000"
+  | "bod_drafting_hours_per_1000"
+  | "dd_design_hours_per_1000"
+  | "dd_drafting_hours_per_1000"
+  | "ca_design_hours_per_1000"
+  | "ca_drafting_hours_per_1000"
+  | "ca_site_days"
+  | "labor_cents"
+  | "hardware_deposit_pct"
+  | "hardware_delivery_pct"
+  | "hardware_substantial_pct"
+  | "labor_deposit_pct"
+  | "labor_delivery_pct"
+  | "labor_substantial_pct"
+> & Record<string, number | string | null>;
+
+type RawProposalLine = Omit<ProposalLine, "quantity" | "unit_msrp_cents"> & {
+  quantity: number | string;
+  unit_msrp_cents: number | string | null;
+};
+
+function num(value: number | string | null | undefined): number {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function asProposal(row: RawProposal): ProjectProposal {
+  const keys = (value: unknown) => (Array.isArray(value) ? value.map(String) : []);
+  return {
+    ...(row as unknown as ProjectProposal),
+    client_name: String(row.client_name ?? ""),
+    title: String(row.title ?? ""),
+    subtitle: String(row.subtitle ?? ""),
+    project_statement: String(row.project_statement ?? ""),
+    scope_note: String(row.scope_note ?? ""),
+    agreement_note: String(row.agreement_note ?? ""),
+    issued_on: row.issued_on ? String(row.issued_on).slice(0, 10) : null,
+    design_rate_cents: num(row.design_rate_cents as number | string),
+    drafting_rate_cents: num(row.drafting_rate_cents as number | string),
+    ca_day_rate_cents: num(row.ca_day_rate_cents as number | string),
+    bod_design_hours_per_1000: num(row.bod_design_hours_per_1000 as number | string),
+    bod_drafting_hours_per_1000: num(row.bod_drafting_hours_per_1000 as number | string),
+    dd_design_hours_per_1000: num(row.dd_design_hours_per_1000 as number | string),
+    dd_drafting_hours_per_1000: num(row.dd_drafting_hours_per_1000 as number | string),
+    ca_design_hours_per_1000: num(row.ca_design_hours_per_1000 as number | string),
+    ca_drafting_hours_per_1000: num(row.ca_drafting_hours_per_1000 as number | string),
+    ca_site_days: num(row.ca_site_days as number | string),
+    labor_cents: num(row.labor_cents as number | string),
+    hardware_deposit_pct: num(row.hardware_deposit_pct as number | string),
+    hardware_delivery_pct: num(row.hardware_delivery_pct as number | string),
+    hardware_substantial_pct: num(row.hardware_substantial_pct as number | string),
+    labor_deposit_pct: num(row.labor_deposit_pct as number | string),
+    labor_delivery_pct: num(row.labor_delivery_pct as number | string),
+    labor_substantial_pct: num(row.labor_substantial_pct as number | string),
+    scope_keys: keys(row.scope_keys),
+    assumption_keys: keys(row.assumption_keys),
+    exclusion_keys: keys(row.exclusion_keys),
+    term_keys: keys(row.term_keys),
+  };
+}
+
+function asProposalLine(row: RawProposalLine): ProposalLine {
+  const phase = PROPOSAL_PHASE_SET.has(row.phase) ? row.phase : "installation";
+  return {
+    ...row,
+    phase,
+    quantity: num(row.quantity),
+    unit_msrp_cents: row.unit_msrp_cents == null || row.unit_msrp_cents === "" ? null : num(row.unit_msrp_cents),
+    system_key: row.system_key ?? "",
+    space_label: row.space_label ?? "",
+    notes: row.notes ?? "",
+    unit: row.unit || "ea",
+    bom_item_id: row.bom_item_id ?? null,
+  };
+}
+
+function prepareProposalLine(proposalId: string, line: ProposalLine, index: number): ProposalLine {
+  const name = line.name.trim();
+  if (!name) throw new Error("Each fee line needs a name.");
+  if (!PROPOSAL_PHASE_SET.has(line.phase)) throw new Error("Fee line phase is not recognized.");
+  const quantity = Math.round(Number(line.quantity) * 1000) / 1000;
+  if (!Number.isFinite(quantity) || quantity <= 0) {
+    throw new Error(`Quantity for “${name}” must be greater than zero.`);
+  }
+  if (line.unit_msrp_cents != null && (!Number.isInteger(line.unit_msrp_cents) || line.unit_msrp_cents < 0)) {
+    throw new Error(`MSRP for “${name}” is not a valid amount.`);
+  }
+  return {
+    ...line,
+    proposal_id: proposalId,
+    name,
+    quantity,
+    unit: line.unit.trim() || "ea",
+    system_key: line.system_key.trim(),
+    space_label: line.space_label.trim(),
+    notes: line.notes.trim(),
+    sort_order: index + 1,
+    deleted_at: null,
+  };
+}
+
+function proposalOrThrow(error: { message: string } | null, fallback: string) {
+  if (!error) return;
+  if (
+    /does not exist|schema cache|project_proposals|proposal_lines|narrative_space_id|discovery_answer_id|proposal_kind/i.test(
+      error.message,
+    )
+  ) {
+    throw new Error(PROPOSAL_SETUP);
+  }
+  throw new Error(error.message || fallback);
 }
 
 async function assertBomSpaces(projectId: string, spaceIds: Array<string | null>) {
