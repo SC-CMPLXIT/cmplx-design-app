@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "@/lib/api";
+import { copyText } from "@/lib/clipboard";
 import {
   answerKey,
   flattenSpaces,
@@ -20,12 +22,19 @@ import type {
   QuestionAnswerStatus,
   TechnologySystem,
 } from "@/lib/types";
+import {
+  buildDiscoveryAgenda,
+  buildSpaceGuide,
+  discoveryAgendaFilename,
+  downloadTextFile,
+} from "@/lib/space-guide";
 import { useKeyedAutosave } from "@/lib/use-autosave";
 import { DiscoveryCall } from "./DiscoveryCall";
 import { DiscoveryChecklist } from "./DiscoveryChecklist";
 import { DiscoveryFiles } from "./DiscoveryFiles";
 import { DiscoveryGaps } from "./DiscoveryGaps";
 import { DiscoverySpaces } from "./DiscoverySpaces";
+import { SpaceGuidePrint, waitForSpaceGuideImages } from "./SpaceGuidePrint";
 import { Button, ErrorText } from "./ui";
 
 type Panel = "spaces" | "files" | "checklist" | "gaps";
@@ -52,8 +61,12 @@ export function DiscoveryPage() {
   const [gaps, setGaps] = useState<DiscoveryDiscrepancy[]>([]);
   const [drafts, setDrafts] = useState<Record<string, DiscoverySpaceDraft>>({});
   const [gapDrafts, setGapDrafts] = useState<Record<string, DiscoveryDiscrepancyDraft>>({});
+  const [statusNote, setStatusNote] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [agendaNotice, setAgendaNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  const agendaTimer = useRef<number | null>(null);
   const draftsRef = useRef(drafts);
   draftsRef.current = drafts;
   const spacesRef = useRef(spaces);
@@ -95,14 +108,19 @@ export function DiscoveryPage() {
   const answersSave = useKeyedAutosave(saveAnswer, onSaveError);
   const gapsSave = useKeyedAutosave(saveGap, onSaveError);
 
+  const flushPending = useCallback(async () => {
+    await Promise.all([spacesSave.flush(), answersSave.flush(), gapsSave.flush()]);
+  }, [answersSave, gapsSave, spacesSave]);
+
   useEffect(() => {
     if (!projectId) return;
     let cancelled = false;
     void (async () => {
       try {
-        const [row, bundle] = await Promise.all([
+        const [row, bundle, notes] = await Promise.all([
           api.getProject(projectId),
           api.getDiscovery(projectId),
+          api.listStatusUpdates(projectId),
         ]);
         if (cancelled) return;
         if (!row) {
@@ -136,6 +154,7 @@ export function DiscoveryPage() {
             bundle.scope.find((item) => item.system_key === system.key)?.in_scope ?? false;
         }
         setProject(row);
+        setStatusNote(notes[0]?.body.trim() || null);
         setSpaces(bundle.spaces);
         setAttachments(bundle.attachments);
         setSystems(bundle.systems);
@@ -157,6 +176,12 @@ export function DiscoveryPage() {
       cancelled = true;
     };
   }, [projectId]);
+
+  useEffect(() => {
+    return () => {
+      if (agendaTimer.current !== null) window.clearTimeout(agendaTimer.current);
+    };
+  }, []);
 
   const inScope = useMemo(
     () => new Set(systems.filter((system) => scopeOn[system.key]).map((system) => system.key)),
@@ -367,6 +392,87 @@ export function DiscoveryPage() {
   }
 
   const openGaps = gaps.filter((gap) => (gapDrafts[gap.id]?.status ?? gap.status) === "open").length;
+  const systemsInScope = systems
+    .filter((system) => scopeOn[system.key])
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map((system) => system.name);
+  const guide = buildSpaceGuide({
+    project,
+    statusNote,
+    spaces,
+    drafts,
+    attachments,
+    questions: visibleQuestions,
+    answers,
+    gaps,
+    gapDrafts,
+    systemsInScope,
+  });
+
+  const noteAgenda = (ok: boolean, text: string) => {
+    setAgendaNotice({ ok, text });
+    if (agendaTimer.current !== null) window.clearTimeout(agendaTimer.current);
+    agendaTimer.current = window.setTimeout(() => setAgendaNotice(null), 4000);
+  };
+
+  const filesForExport = async () => {
+    try {
+      const bundle = await api.getDiscovery(project.id);
+      return bundle.attachments;
+    } catch {
+      return attachments;
+    }
+  }
+
+  const onPrintGuide = async () => {
+    await flushPending();
+    const files = await filesForExport();
+    flushSync(() => setAttachments(files));
+    await waitForSpaceGuideImages();
+    window.print();
+  }
+
+  const onDocx = async () => {
+    setExporting(true);
+    setError(null);
+    try {
+      await flushPending();
+      const files = await filesForExport();
+      flushSync(() => setAttachments(files));
+      const { downloadSpaceGuideDocx } = await import("@/lib/space-guide-docx");
+      await downloadSpaceGuideDocx(
+        buildSpaceGuide({
+          project,
+          statusNote,
+          spaces,
+          drafts,
+          attachments: files,
+          questions: visibleQuestions,
+          answers,
+          gaps,
+          gapDrafts,
+          systemsInScope,
+        }),
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not build the space guide.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  const onCopyAgenda = async () => {
+    await flushPending();
+    const ok = await copyText(buildDiscoveryAgenda(guide));
+    noteAgenda(ok, ok ? "Agenda copied." : "Could not copy from this browser.");
+  }
+
+  const onDownloadAgenda = () => {
+    void flushPending();
+    downloadTextFile(discoveryAgendaFilename(project.name), buildDiscoveryAgenda(guide));
+    noteAgenda(true, "Agenda downloaded.");
+  }
+
   const tabs: { id: Panel; label: string }[] = [
     { id: "spaces", label: "Spaces" },
     { id: "files", label: "Drawings" },
@@ -387,24 +493,48 @@ export function DiscoveryPage() {
           <h1 className="mt-2 font-serif text-4xl tracking-tight sm:text-5xl">Rooms_</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-soft">
             Walk each room against the plan. Questions follow the systems in scope that apply to a
-            space. Answers autosave.
+            space. Answers autosave. Print and DOCX are the space guide. The agenda is the open
+            questions and open discrepancies, as plain text.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {call ? null : (
-            <Button type="button" onClick={() => writeParams({ call: true, space: selected })}>
-              Live call
+        <div className="flex max-w-full flex-col gap-2 sm:items-end">
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="ghost" onClick={() => void onPrintGuide()}>
+              Print / PDF
             </Button>
-          )}
-          <Button type="button" variant="ghost" onClick={() => navigate(`/projects/${project.id}`)}>
-            Back
-          </Button>
+            <Button type="button" variant="ghost" onClick={() => void onDocx()} disabled={exporting}>
+              {exporting ? "Preparing DOCX…" : "Download DOCX"}
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => void onCopyAgenda()}>
+              Copy agenda
+            </Button>
+            <Button type="button" variant="ghost" onClick={onDownloadAgenda}>
+              Agenda .txt
+            </Button>
+            {call ? null : (
+              <Button type="button" onClick={() => writeParams({ call: true, space: selected })}>
+                Live call
+              </Button>
+            )}
+            <Button type="button" variant="ghost" onClick={() => navigate(`/projects/${project.id}`)}>
+              Back
+            </Button>
+          </div>
+          {agendaNotice ? (
+            <p
+              role="status"
+              className={agendaNotice.ok ? "text-sm text-emerald-800" : "text-sm text-rose-800"}
+            >
+              {agendaNotice.text}
+            </p>
+          ) : null}
         </div>
       </div>
       <div className="no-print mb-4">
         <ErrorText>{error}</ErrorText>
       </div>
 
+      <div className="no-print">
       {call ? (
         <DiscoveryCall
           spaces={spaces}
@@ -488,6 +618,8 @@ export function DiscoveryPage() {
           ) : null}
         </>
       )}
+      </div>
+      <SpaceGuidePrint model={guide} />
     </div>
   );
 }

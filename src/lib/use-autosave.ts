@@ -52,6 +52,10 @@ export function useKeyedAutosave<T>(
     [persist],
   );
 
+  const flush = useCallback(() => {
+    return Promise.all([...dirtyRef.current].map((key) => flushKey(key))).then(() => undefined);
+  }, [flushKey]);
+
   const queue = useCallback(
     (key: string, value: T, immediate = false) => {
       valuesRef.current[key] = value;
@@ -95,5 +99,5 @@ export function useKeyedAutosave<T>(
     return () => window.removeEventListener("beforeunload", onLeave);
   }, []);
 
-  return { hints, queue, flushKey };
+  return { hints, queue, flushKey, flush };
 }
