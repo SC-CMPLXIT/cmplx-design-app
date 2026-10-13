@@ -464,13 +464,13 @@ export function DiscoveryPage() {
   const onCopyAgenda = async () => {
     await flushPending();
     const ok = await copyText(buildDiscoveryAgenda(guide));
-    noteAgenda(ok, ok ? "Agenda copied." : "Could not copy from this browser.");
+    noteAgenda(ok, ok ? "Meeting agenda copied." : "Could not copy from this browser.");
   }
 
   const onDownloadAgenda = () => {
     void flushPending();
     downloadTextFile(discoveryAgendaFilename(project.name), buildDiscoveryAgenda(guide));
-    noteAgenda(true, "Agenda downloaded.");
+    noteAgenda(true, "Meeting agenda downloaded.");
   }
 
   const tabs: { id: Panel; label: string }[] = [
@@ -493,8 +493,9 @@ export function DiscoveryPage() {
           <h1 className="mt-2 font-serif text-4xl tracking-tight sm:text-5xl">Rooms_</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-soft">
             Walk each room against the plan. Questions follow the systems in scope that apply to a
-            space. Answers autosave. Print and DOCX are the space guide. The agenda is the open
-            questions and open discrepancies, as plain text.
+            space. Answers autosave. Print and DOCX are the space guide: answered questions in
+            full, and unanswered questions in one Open questions list per room. Meeting agenda
+            (paste into Granola) is the open questions and open discrepancies, as plain text.
           </p>
         </div>
         <div className="flex max-w-full flex-col gap-2 sm:items-end">
@@ -506,10 +507,10 @@ export function DiscoveryPage() {
               {exporting ? "Preparing DOCX…" : "Download DOCX"}
             </Button>
             <Button type="button" variant="ghost" onClick={() => void onCopyAgenda()}>
-              Copy agenda
+              Meeting agenda (paste into Granola)
             </Button>
             <Button type="button" variant="ghost" onClick={onDownloadAgenda}>
-              Agenda .txt
+              Meeting agenda .txt
             </Button>
             {call ? null : (
               <Button type="button" onClick={() => writeParams({ call: true, space: selected })}>

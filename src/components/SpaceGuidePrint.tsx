@@ -1,5 +1,10 @@
 import { exportAnswerText } from "@/lib/systems";
-import { summaryRows, type SpaceGuideModel } from "@/lib/space-guide";
+import {
+  answeredGuideSections,
+  openGuideQuestions,
+  summaryRows,
+  type SpaceGuideModel,
+} from "@/lib/space-guide";
 
 export function waitForSpaceGuideImages(): Promise<void> {
   const images = [...document.querySelectorAll<HTMLImageElement>(".space-guide-print img")];
@@ -17,6 +22,23 @@ export function waitForSpaceGuideImages(): Promise<void> {
       window.setTimeout(resolve, 4000);
     }),
   ]);
+}
+
+function OpenQuestionList({ space }: { space: SpaceGuideModel["spaces"][number] }) {
+  const open = openGuideQuestions(space);
+  if (open.length === 0) return null;
+  return (
+    <div>
+      <h3>Open questions</h3>
+      <ul className="guide-open">
+        {open.map((question) => (
+          <li key={question.key}>
+            {question.sectionName}: {question.prompt}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 function GuideFigure({ url, name, label }: { url: string; name: string; label: string }) {
@@ -105,25 +127,28 @@ export function SpaceGuidePrint({ model }: { model: SpaceGuideModel }) {
             {space.sections.length === 0 ? (
               <p>No space systems are in scope, so this room has no checklist.</p>
             ) : (
-              space.sections.map((section) => (
-                <div key={section.key}>
-                  <h3>{section.name}</h3>
-                  {section.questions.map((question) => {
-                    const empty = question.body.trim().length === 0;
-                    return (
-                      <article key={question.key} className="guide-qa">
-                        <p className="guide-prompt">{question.prompt}</p>
-                        <p className={`guide-status guide-status-${question.status}`}>
-                          {question.statusLabel}
-                        </p>
-                        <p className={empty ? "guide-answer guide-empty" : "guide-answer"}>
-                          {exportAnswerText(question.body)}
-                        </p>
-                      </article>
-                    );
-                  })}
-                </div>
-              ))
+              <>
+                {answeredGuideSections(space).map((section) => (
+                  <div key={section.key}>
+                    <h3>{section.name}</h3>
+                    {section.questions.map((question) => {
+                      const empty = question.body.trim().length === 0;
+                      return (
+                        <article key={question.key} className="guide-qa">
+                          <p className="guide-prompt">{question.prompt}</p>
+                          <p className={`guide-status guide-status-${question.status}`}>
+                            {question.statusLabel}
+                          </p>
+                          <p className={empty ? "guide-answer guide-empty" : "guide-answer"}>
+                            {exportAnswerText(question.body)}
+                          </p>
+                        </article>
+                      );
+                    })}
+                  </div>
+                ))}
+                <OpenQuestionList space={space} />
+              </>
             )}
           </section>
         );

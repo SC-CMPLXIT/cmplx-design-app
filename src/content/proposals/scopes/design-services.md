@@ -36,3 +36,4 @@
 - Provide an Issue for Bill of Materials for approval that includes a Request for Proposal and Bill of Materials for accurate scope alignment.
 - Review and level Technology Bids
 - Provide a draft responsibility matrix to delineate responsibilities between Owner, Consultant, General Contractor, Sub-Contractors, and Integrator.
+- Formal CMPLX iT proposal (scope, fees, schedule, terms).

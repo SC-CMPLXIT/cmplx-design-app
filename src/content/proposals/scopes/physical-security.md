@@ -1,5 +1,7 @@
 # Scope of Services — Physical Security (Access Control & Video Surveillance)
 
+> Proposals do not insert this combined file. Design proposals use `physical-security-design.md`. Implementation proposals use `physical-security-install.md`.
+
 > **Source:** Claude conversation `3e985c1d` — "Physical security scope of services" (2026-01-17). Extracted from the final generator script `create_security_scope` (text of the .docx deliverable). Later turns in the chat produced website sales copy only, not scope revisions.
 
 ---

@@ -3,7 +3,7 @@ import { Link, Navigate, useParams } from "react-router-dom";
 import { api } from "@/lib/api";
 import { TECHNOLOGY_SYSTEMS } from "@/lib/systems";
 import { BOM_UNITS } from "@/lib/bom";
-import { parseAreaSf } from "@/lib/proposal-fee";
+import { commitNonNegativeDecimal, parseNonNegativeDecimal, parseAreaSf } from "@/lib/proposal-fee";
 import {
   assumptionsFrom,
   buildProposalDocument,
@@ -15,6 +15,7 @@ import { downloadProposalDocx } from "@/lib/proposal-docx";
 import {
   clausesFor,
   scopeBlocksFor,
+  scopeKeysForKind,
   suggestedScopeKeys,
 } from "@/lib/proposal-library";
 import { blankProposalLine, mergeBomIntoLines } from "@/lib/proposal-draft";
@@ -281,6 +282,7 @@ export function ProposalEditor() {
               </div>
               <ul className="mt-4 space-y-3">
                 {scopeBlocks.map((block) => {
+                  const selected = scopeKeysForKind(kind, proposal.scope_keys);
                   const hits = block.systemKeys
                     .filter((key) => inScope.includes(key))
                     .map((key) => systemNames.get(key) ?? key);
@@ -290,9 +292,11 @@ export function ProposalEditor() {
                         <input
                           type="checkbox"
                           className="mt-1"
-                          checked={proposal.scope_keys.includes(block.key)}
+                          checked={selected.includes(block.key)}
                           onChange={(event) =>
-                            patch({ scope_keys: toggleKey(proposal.scope_keys, block.key, event.target.checked) })
+                            patch({
+                              scope_keys: toggleKey(selected, block.key, event.target.checked),
+                            })
                           }
                         />
                         <span>
@@ -422,6 +426,41 @@ export function ProposalEditor() {
   );
 }
 
+function DecimalNumberInput({
+  value,
+  onCommit,
+}: {
+  value: number;
+  onCommit: (next: number) => void;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  return (
+    <input
+      className={fieldControlClass}
+      type="text"
+      inputMode="decimal"
+      autoComplete="off"
+      spellCheck={false}
+      value={draft ?? String(value)}
+      onChange={(event) => {
+        const next = event.target.value;
+        if (next !== "" && !/^\d*\.?\d{0,2}$/.test(next)) return;
+        setDraft(next);
+        if (next === "" || next === "." || next.endsWith(".")) {
+          if (next === "") onCommit(0);
+          return;
+        }
+        const parsed = parseNonNegativeDecimal(next);
+        if (parsed != null) onCommit(parsed);
+      }}
+      onBlur={(event) => {
+        onCommit(commitNonNegativeDecimal(event.currentTarget.value));
+        setDraft(null);
+      }}
+    />
+  );
+}
+
 function DesignFeeFields({
   proposal,
   onChange,
@@ -433,13 +472,13 @@ function DesignFeeFields({
     { key: "design_rate_cents", label: "Design $ / hour", step: "1" },
     { key: "drafting_rate_cents", label: "Drafting $ / hour", step: "1" },
     { key: "ca_day_rate_cents", label: "CA site day $", step: "1" },
-    { key: "bod_design_hours_per_1000", label: "BoD design h / 1,000 sf", step: "0.5" },
-    { key: "bod_drafting_hours_per_1000", label: "BoD drafting h / 1,000 sf", step: "0.5" },
-    { key: "dd_design_hours_per_1000", label: "DD–CD design h / 1,000 sf", step: "0.5" },
-    { key: "dd_drafting_hours_per_1000", label: "DD–CD drafting h / 1,000 sf", step: "0.5" },
-    { key: "ca_design_hours_per_1000", label: "CA design h / 1,000 sf", step: "0.5" },
-    { key: "ca_drafting_hours_per_1000", label: "CA drafting h / 1,000 sf", step: "0.5" },
-    { key: "ca_site_days", label: "CA site days (count)", step: "0.5" },
+    { key: "bod_design_hours_per_1000", label: "BoD design h / 1,000 sf", step: "0.01" },
+    { key: "bod_drafting_hours_per_1000", label: "BoD drafting h / 1,000 sf", step: "0.01" },
+    { key: "dd_design_hours_per_1000", label: "DD–CD design h / 1,000 sf", step: "0.01" },
+    { key: "dd_drafting_hours_per_1000", label: "DD–CD drafting h / 1,000 sf", step: "0.01" },
+    { key: "ca_design_hours_per_1000", label: "CA design h / 1,000 sf", step: "0.01" },
+    { key: "ca_drafting_hours_per_1000", label: "CA drafting h / 1,000 sf", step: "0.01" },
+    { key: "ca_site_days", label: "CA site days (count)", step: "0.01" },
   ];
   return (
     <section className="rounded-sm border border-rule bg-white p-5">
@@ -447,8 +486,9 @@ function DesignFeeFields({
       <p className="mt-1 max-w-3xl text-sm leading-6 text-ink-soft">
         Hours for a phase equal gross area divided by 1,000, times the hours per 1,000 sf in that
         box. Dollars are those hours times the rate, rounded to the cent. Site days are a count for
-        the whole project, times the site-day rate. Defaults are 6 and 2 hours (Basis of Design),
-        10 and 8 (DD–CD), 2 and 1 plus 4 site days (CA), at $200, $110, and $1,200.
+        the whole project, times the site-day rate. Defaults are 3 and 1 hours (Basis of Design),
+        5 and 4 (DD–CD), 1 and 0.5 plus 4 site days (CA), at $200, $110, and $1,200. On 11,500 sf
+        that is $32,457.50.
       </p>
       <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {fields.map((field) => {
@@ -457,18 +497,24 @@ function DesignFeeFields({
           const shown = typeof raw === "number" ? (money ? raw / 100 : raw) : "";
           return (
             <Field key={field.key} label={field.label}>
-              <input
-                className={fieldControlClass}
-                type="number"
-                min={0}
-                step={field.step}
-                value={shown}
-                onChange={(event) => {
-                  const parsed = numberOr(event.target.value, 0);
-                  const stored = money ? Math.round(parsed * 100) : parsed;
-                  onChange({ [field.key]: stored });
-                }}
-              />
+              {money ? (
+                <input
+                  className={fieldControlClass}
+                  type="number"
+                  min={0}
+                  step={field.step}
+                  value={shown}
+                  onChange={(event) => {
+                    const parsed = numberOr(event.target.value, 0);
+                    onChange({ [field.key]: Math.round(parsed * 100) });
+                  }}
+                />
+              ) : (
+                <DecimalNumberInput
+                  value={typeof raw === "number" ? raw : 0}
+                  onCommit={(next) => onChange({ [field.key]: next })}
+                />
+              )}
             </Field>
           );
         })}

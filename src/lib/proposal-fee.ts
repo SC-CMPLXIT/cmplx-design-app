@@ -11,9 +11,10 @@
  * A line's dollars round to the cent after that multiplication.
  *
  * Starting assumptions (change them on the draft):
- *   Basis of Design: 6 design hours and 2 drafting hours per 1,000 sf
- *   DD–CD: 10 design hours and 8 drafting hours per 1,000 sf
- *   CA: 2 design hours and 1 drafting hour per 1,000 sf, plus 4 site days
+ *   Basis of Design: 3 design hours and 1 drafting hour per 1,000 sf
+ *   DD–CD: 5 design hours and 4 drafting hours per 1,000 sf
+ *   CA: 1 design hour and 0.5 drafting hour per 1,000 sf, plus 4 site days
+ *   (11,500 sf: 103.5 design h, 63.25 drafting h, 4 site days = $32,457.50)
  *   Rates: $200 / design hour, $110 / drafting hour, $1,200 / CA site day
  *
  * Hardware milestones default to 90% ordering deposit, 8% delivery, 2%
@@ -28,12 +29,12 @@ export const DESIGN_RATE_CENTS = 20_000;
 export const DRAFTING_RATE_CENTS = 11_000;
 export const CA_DAY_RATE_CENTS = 120_000;
 
-export const DEFAULT_BOD_DESIGN_HOURS = 6;
-export const DEFAULT_BOD_DRAFTING_HOURS = 2;
-export const DEFAULT_DD_DESIGN_HOURS = 10;
-export const DEFAULT_DD_DRAFTING_HOURS = 8;
-export const DEFAULT_CA_DESIGN_HOURS = 2;
-export const DEFAULT_CA_DRAFTING_HOURS = 1;
+export const DEFAULT_BOD_DESIGN_HOURS = 3;
+export const DEFAULT_BOD_DRAFTING_HOURS = 1;
+export const DEFAULT_DD_DESIGN_HOURS = 5;
+export const DEFAULT_DD_DRAFTING_HOURS = 4;
+export const DEFAULT_CA_DESIGN_HOURS = 1;
+export const DEFAULT_CA_DRAFTING_HOURS = 0.5;
 export const DEFAULT_CA_SITE_DAYS = 4;
 
 export const DEFAULT_HARDWARE_DEPOSIT_PCT = 90;
@@ -164,6 +165,29 @@ export function dollarsToCents(value: string): number | null {
 export function centsToDollarInput(cents: number | null | undefined): string {
   if (cents == null) return "";
   return (cents / 100).toFixed(2);
+}
+
+/**
+ * Hours and site days. Blank is 0. A trailing dot is unfinished, so the
+ * result is null and the field can keep the character the editor just typed.
+ * Two decimal places match `numeric(8, 2)`.
+ */
+export function parseNonNegativeDecimal(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return 0;
+  if (trimmed === "." || trimmed.endsWith(".")) return null;
+  if (!/^(?:\d+\.\d{0,2}|\d+|\.\d{1,2})$/.test(trimmed)) return null;
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return Math.round(parsed * 100) / 100;
+}
+
+/** Finish an hours field. A trailing dot keeps the digits before it. */
+export function commitNonNegativeDecimal(value: string): number {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === ".") return 0;
+  const normalized = trimmed.endsWith(".") ? trimmed.slice(0, -1) : trimmed;
+  return parseNonNegativeDecimal(normalized) ?? 0;
 }
 
 function roundCents(amount: number): number {

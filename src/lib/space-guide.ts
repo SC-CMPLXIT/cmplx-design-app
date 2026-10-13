@@ -231,6 +231,43 @@ export function buildSpaceGuide(source: SpaceGuideSource): SpaceGuideModel {
   };
 }
 
+/** Open, with no answer text. These are the rows that used to print "Open / No answer yet." */
+export function questionIsUnanswered(question: GuideQuestion): boolean {
+  return question.status === "open" && question.body.trim().length === 0;
+}
+
+export type OpenGuideQuestion = {
+  key: string;
+  sectionKey: string;
+  sectionName: string;
+  prompt: string;
+};
+
+export function answeredGuideSections(space: GuideSpace): GuideSection[] {
+  return space.sections
+    .map((section) => ({
+      ...section,
+      questions: section.questions.filter((question) => !questionIsUnanswered(question)),
+    }))
+    .filter((section) => section.questions.length > 0);
+}
+
+export function openGuideQuestions(space: GuideSpace): OpenGuideQuestion[] {
+  const open: OpenGuideQuestion[] = [];
+  for (const section of space.sections) {
+    for (const question of section.questions) {
+      if (!questionIsUnanswered(question)) continue;
+      open.push({
+        key: question.key,
+        sectionKey: section.key,
+        sectionName: section.name,
+        prompt: question.prompt,
+      });
+    }
+  }
+  return open;
+}
+
 export function summaryRows(model: SpaceGuideModel): [string, string][] {
   const rows: [string, string][] = [
     ["Project", model.projectName],
@@ -246,7 +283,7 @@ export function summaryRows(model: SpaceGuideModel): [string, string][] {
 
 export function buildDiscoveryAgenda(model: SpaceGuideModel): string {
   const lines: string[] = [
-    "AV/IT discovery agenda",
+    "Meeting agenda",
     model.projectName,
     model.printedOn,
     "",
@@ -314,7 +351,7 @@ export function spaceGuideDocxFilename(projectName: string): string {
 }
 
 export function discoveryAgendaFilename(projectName: string): string {
-  return `${spaceGuideBasename(projectName)} — discovery agenda.txt`;
+  return `${spaceGuideBasename(projectName)} — meeting agenda.txt`;
 }
 
 export function downloadTextFile(filename: string, text: string): void {
