@@ -16,7 +16,8 @@ import hospitalityConsulting from "../content/proposals/scopes/hospitality-consu
 import hospitalitySimple from "../content/proposals/scopes/hospitality-simple.md?raw";
 import implementation from "../content/proposals/scopes/implementation.md?raw";
 import itInfrastructure from "../content/proposals/scopes/it-infrastructure-design.md?raw";
-import physicalSecurity from "../content/proposals/scopes/physical-security.md?raw";
+import physicalSecurityDesign from "../content/proposals/scopes/physical-security-design.md?raw";
+import physicalSecurityInstall from "../content/proposals/scopes/physical-security-install.md?raw";
 import technicalProgram from "../content/proposals/scopes/technical-program-management.md?raw";
 import type { ProposalKind } from "./types";
 
@@ -78,10 +79,17 @@ export const SCOPE_BLOCKS: readonly ScopeBlock[] = [
   },
   {
     key: "physical_security",
-    title: "Physical security",
-    kind: "both",
+    title: "Physical security design",
+    kind: "design",
     systemKeys: ["security"],
-    body: clientScope(physicalSecurity),
+    body: clientScope(physicalSecurityDesign),
+  },
+  {
+    key: "physical_security_install",
+    title: "Physical security installation",
+    kind: "implementation",
+    systemKeys: ["security"],
+    body: clientScope(physicalSecurityInstall),
   },
   {
     key: "implementation_services",
@@ -314,6 +322,24 @@ export function suggestedScopeKeys(kind: ProposalKind, inScope: ReadonlySet<stri
         block.systemKeys.length > 0 && block.systemKeys.some((key) => inScope.has(key)),
     )
     .map((block) => block.key);
+}
+
+/**
+ * Keys that belong on this proposal kind. A saved implementation draft may
+ * still say `physical_security` from before that block was design-only; show
+ * the installation block until the editor saves the new key.
+ */
+export function scopeKeysForKind(kind: ProposalKind, keys: readonly string[]): string[] {
+  const allowed = new Set(scopeBlocksFor(kind).map((block) => block.key));
+  const seen = new Set<string>();
+  const next: string[] = [];
+  for (const key of keys) {
+    const mapped = kind === "implementation" && key === "physical_security" ? "physical_security_install" : key;
+    if (!allowed.has(mapped) || seen.has(mapped)) continue;
+    seen.add(mapped);
+    next.push(mapped);
+  }
+  return next;
 }
 
 export function clausesFor(group: ClauseBlock["group"]): ClauseBlock[] {

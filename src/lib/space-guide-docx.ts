@@ -20,6 +20,8 @@ import {
 } from "docx";
 import { fetchGuideImage, type GuideRaster } from "./space-guide-media";
 import {
+  answeredGuideSections,
+  openGuideQuestions,
   spaceGuideDocxFilename,
   summaryRows,
   type GuideGap,
@@ -334,9 +336,21 @@ export function composeSpaceGuideDocument(
         }),
       );
     }
-    for (const section of space.sections) {
+    for (const section of answeredGuideSections(space)) {
       children.push(heading(section.name, 2));
       for (const question of section.questions) children.push(...questionBlocks(question));
+    }
+    const open = openGuideQuestions(space);
+    if (open.length > 0) {
+      children.push(heading("Open questions", 2));
+      for (const question of open) {
+        children.push(
+          new Paragraph({
+            spacing: { after: 40 },
+            children: [run(`${question.sectionName}: ${question.prompt}`, { size: 19 })],
+          }),
+        );
+      }
     }
   }
 

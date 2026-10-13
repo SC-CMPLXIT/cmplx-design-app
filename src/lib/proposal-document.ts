@@ -17,7 +17,7 @@ import {
   AGREEMENT_PARAGRAPHS,
   CLAUSE_BLOCKS,
   SCOPE_BLOCKS,
-  scopeBlocksFor,
+  scopeKeysForKind,
 } from "./proposal-library";
 import type { Project, ProjectProposal, ProposalKind, ProposalLine } from "./types";
 
@@ -206,7 +206,7 @@ export function buildProposalDocument(
   const priced = hardwareTotalCents(lines);
   const hardware = hardwareSplit(proposal);
   const labor = laborSplit(proposal);
-  const scopeAllowed = new Set(scopeBlocksFor(proposal.kind).map((block) => block.key));
+  const scopeKeys = scopeKeysForKind(proposal.kind, proposal.scope_keys);
   return {
     kind: proposal.kind,
     kindLabel,
@@ -216,10 +216,7 @@ export function buildProposalDocument(
     clientName: proposal.client_name.trim(),
     issuedLabel: formatDate(proposal.issued_on),
     statement: proposal.project_statement.trim(),
-    scopeBlocks: selectedBlocks(
-      proposal.scope_keys.filter((key) => scopeAllowed.has(key)),
-      SCOPE_BLOCKS,
-    ),
+    scopeBlocks: selectedBlocks(scopeKeys, SCOPE_BLOCKS),
     scopeNote: proposal.scope_note.trim(),
     feeNote:
       "Significant changes in the project's design, scope, or schedule may require additional services.",
